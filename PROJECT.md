@@ -222,7 +222,10 @@ Delivery: **https://jmartz.github.io/kitchen-viewer/** opened in the Quest Brows
   B = island finish, X = recenter, Y = plan floor. A CanvasTexture legend card is
   parented to the left controller and redraws only when `current+finish` changes.
 - **Perf on session start**: shadow map 2048→1024 (dispose + null the old map or the
-  change is ignored), `setFoveation(0.7)`. Restored on session end.
+  change is ignored), restored on session end. Fixed foveation is set to 0.7 on the
+  first XR frame: r128 predates `renderer.xr.setFoveation` (r131), so it falls back to
+  `session.renderState.baseLayer.fixedFoveation`, which doesn't exist until the render
+  state has actually been applied — i.e. not yet at the `sessionstart` event.
 - **L13 — WebXR needs https.** No secure context, no `navigator.xr` at all; the button
   simply never appears and there is no error to see. The page now detects
   `!window.isSecureContext` and says so out loud rather than failing silently.
