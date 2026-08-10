@@ -132,6 +132,7 @@ function makeMaterials(){
   M.woodDk = new THREE.MeshLambertMaterial({color:0x7d6140});
   M.cushion= new THREE.MeshLambertMaterial({color:0xb9a98d});
   M.cushB  = new THREE.MeshLambertMaterial({color:0x8494a3});   // gray-blue banquette cushion
+  M.sofa   = new THREE.MeshLambertMaterial({color:0x4f7194});   // Interior Define "Azure"
   M.pillow = new THREE.MeshLambertMaterial({color:0xefece4});
   M.woven  = new THREE.MeshLambertMaterial({color:0xc7ab7d});   // woven roman shades
   M.glass  = new THREE.MeshPhongMaterial({color:0xbfd9e6,transparent:true,opacity:0.28,shininess:100});
@@ -331,6 +332,7 @@ function makeMaterials(){
   M.rail.map=T(grainC,2,1);            M.rail.color.setHex(0xa3906f);
   M.door.map=T(plasterC,2,2);
   M.cushion.map=T(weaveC,3,3); M.cushB.map=T(weaveC,4,4); M.pillow.map=T(weaveC,2,2);
+  M.sofa.map=T(weaveC,4,4);
   M.steel.map=T(brushC,1,1);
   M.trimDk = new THREE.MeshLambertMaterial({color:0xdcd7cd, map:T(plasterC,2.4,2.4)});
   M.trimW.map = T(plasterC,2,2);
@@ -356,7 +358,7 @@ function loadExternalTextures(){
     ['wall.jpg',    [['wall',5,3],['wallX',5,3]]],
     ['tile.jpg',    [['tile',5,1.6]]],
     ['ceiling.jpg', [['plank',3,4]]],
-    ['fabric.jpg',  [['cushion',3,3],['cushB',4,4],['pillow',2,2]]],
+    ['fabric.jpg',  [['cushion',3,3],['cushB',4,4],['pillow',2,2],['sofa',4,4]]],
     ['steel.jpg',   [['steel',1,1]]]
   ];
   const loader=new THREE.TextureLoader();
@@ -391,7 +393,7 @@ function convertPBR(){
     appl:{r:.30,m:.80,e:1.35},applDk:{r:.5,m:.6,e:.9},applGl:{cls:'phys',r:.09,m:.35,cc:.9,ccr:.06,e:1.5},
     basin:{r:.34,m:.72,e:.75},
     wood:{r:.62,b:.02},woodDk:{r:.68,b:.02},cushion:{r:1,b:.012},cushB:{r:1,b:.012},
-    pillow:{r:1,b:.012},woven:{r:.95},door:{r:.6,b:.003},trimW:{r:.5,b:.003},frame:{r:.45,m:.5},
+    pillow:{r:1,b:.012},sofa:{r:1,b:.014},woven:{r:.95},door:{r:.6,b:.003},trimW:{r:.5,b:.003},frame:{r:.45,m:.5},
     rail:{r:.85,b:.015},trimDk:{r:.55,b:.003},stone:{r:.97,b:.05},beam:{r:.85,b:.02},plank:{r:.88,b:.015},
     grass:{r:1},deck:{r:.9,b:.02},floor:{r:.62,b:.012},tile:{r:.22,b:.01}};
   for(const k in spec){
@@ -744,6 +746,46 @@ function chair(x,z,facing){ // dining chair, facing ±x
   place(box(0.12,1.8,1.3,M.woodDk), x-facing*0.56, 2.35, z);
   solid(x-0.65,z-0.65,1.3,1.3);
 }
+/* L-shaped corner sectional with the corner at the NE, so the east leg faces
+   west at the fireplace and the north leg faces south at the TV. (x,z) is the
+   min corner of the square footprint, L the leg length, D the seat depth. */
+function sectional(x,z,L,D,fab){
+  const SEAT=1.42, BACK=2.62, ARM=2.05, BT=0.58, AT=0.55, PAD=0.40;
+  const x0=x, x2=x+L, x1=x2-D, z0=z, z1=z+L;
+  const FF=(a,b)=>matFit(fab,a,b,3.0);
+  place(box(D-0.14, SEAT-PAD, L-0.14, fab), x1+D/2, (SEAT-PAD)/2, z0+L/2);
+  place(box(L-D-0.14, SEAT-PAD, D-0.14, fab), x0+(L-D)/2, (SEAT-PAD)/2, z0+D/2);
+  place(box(BT, BACK, L, FF(L,BACK)), x2-BT/2, BACK/2, z0+L/2);            // east back
+  place(box(L-BT, BACK, BT, FF(L-BT,BACK)), x0+(L-BT)/2, BACK/2, z0+BT/2); // north back
+  place(box(D-BT, ARM, AT, fab), x1+(D-BT)/2, ARM/2, z1-AT/2);             // south arm
+  place(box(AT, ARM, D-BT, fab), x0+AT/2, ARM/2, z0+BT+(D-BT)/2);          // west arm
+  const sd=D-BT, cz=z0+BT+sd/2, nx0=x0+AT, nx1=x1;
+  place(box(sd-0.08, PAD, sd-0.08, FF(sd,sd)), x1+sd/2, SEAT-PAD/2, cz);   // corner seat
+  place(box(nx1-nx0-0.08, PAD, sd-0.08, FF(nx1-nx0,sd)), (nx0+nx1)/2, SEAT-PAD/2, cz);
+  const ez0=z0+BT+sd, ez1=z1-AT, el=(ez1-ez0)/2;
+  for(let i=0;i<2;i++)
+    place(box(sd-0.08, PAD, el-0.08, FF(sd,el)), x1+sd/2, SEAT-PAD/2, ez0+el*(i+0.5));
+  const bh=BACK-SEAT-0.14, by=SEAT+(BACK-SEAT)/2;
+  place(box(0.5, bh, sd-0.1, FF(sd,bh)), x2-BT-0.25, by, cz);
+  for(let i=0;i<2;i++)
+    place(box(0.5, bh, el-0.1, FF(el,bh)), x2-BT-0.25, by, ez0+el*(i+0.5));
+  place(box(nx1-nx0-0.1, bh, 0.5, FF(nx1-nx0,bh)), (nx0+nx1)/2, by, z0+BT+0.25);
+  solid(x1, z0, D, L);
+  solid(x0, z0, L-D, D);
+}
+/* wall-hung flatscreen, 16:9. (x,z) on the wall face, yc = screen centre height,
+   diag in inches; `out` is the direction it faces along the normal axis. */
+function tv(x,z,yc,diag,alongX,out){
+  const k=diag/Math.sqrt(337)/12, w=16*k, h=9*k;
+  const put=(uw,hh,dep,mat,off)=>{
+    const m = alongX ? box(uw,hh,dep,mat) : box(dep,hh,uw,mat);
+    return alongX ? place(m, x, yc, z+out*(off+dep/2))
+                  : place(m, x+out*(off+dep/2), yc, z);
+  };
+  put(1.4, 1.4, 0.10, M.applDk, 0);                 // wall bracket
+  put(w, h, 0.16, M.applDk, 0.06).castShadow=false; // chassis
+  put(w-0.07, h-0.07, 0.02, M.applGl, 0.22).castShadow=false;  // screen
+}
 function banquette(x,z,w,d){ // built-in bench: white base, gray-blue cushion
   place(box(w,1.3,d,M.cab), x+w/2,0.65,z+d/2);
   place(box(w-0.05,0.32,d-0.05,M.cushB), x+w/2,1.46,z+d/2);
@@ -970,10 +1012,11 @@ function buildShared(opt){
   // passage into dining between z=PASS_Z0 and z=PASS_Z1)
   wallSeg(FAM_XW,SOUTH, FAM_XE-FAM_XW, true, [], M.wall, FAM_H);
   wallSeg(ZONE_W+WALL_T/2,PASS_Z1, SOUTH+WALL_T/2-PASS_Z1, false, [], M.wall, FAM_H);
-  // sofa facing the fireplace, rug between
-  place(box(3,1.4,7,M.cushion), 16.5,0.8, ZONE_D+10.7);
-  place(box(0.9,1.2,7,M.cushion), 17.7,1.9, ZONE_D+10.7);
-  solid(15,ZONE_D+7.2,3.7,7);
+  // Interior Define "James" 4-seat corner sectional, 104" x 104" x 40" deep,
+  // Azure. Corner at the NE: east leg faces the fireplace, north leg faces the
+  // TV on the south wall. Rug between it and the hearth.
+  sectional(11.03, 22.0, 8.667, 3.333, M.sofa);
+  tv(13.7, SOUTH-WALL_T/2, 3.75, 85, true, -1);   // 85" flatscreen, south wall
   outlet(6.35,13.6,1.3,false); outlet(20.9,20.0,1.3,false);
   outlet(13.5,SOUTH-0.28,1.3,true);
   const rug=new THREE.Mesh(new THREE.PlaneGeometry(F(6),F(9)),new THREE.MeshLambertMaterial({color:0x9c8a74}));
@@ -1055,12 +1098,18 @@ function buildOptionA(){
   for(let i=0;i<4;i++) stool(ix+1.15+i*1.9, iz+2.9);     // tucked under 12" overhang
   pendant(ix+1.7, iz+1.4); pendant(ix+4, iz+1.4); pendant(ix+6.3, iz+1.4);
   // nook: built-in L banquette (east + north return), trestle table, chairs
-  banquette(19.96,1.5, 1.1, 8.46);           // bench along dining wall
-  banquette(15.64,9.96, 5.41, 1.46);         // south return wraps table end -> L
+  // U-banquette, all 1'-6" deep, line-scanned off the sheet: north bench runs
+  // under the 3' window from the pantry cabinet east to the dining wall, east
+  // bench down the dining wall, south return closes the U. The table sits flush
+  // to the north and south benches, so both ends are comfortable seats.
+  banquette(16.61, 0.0,   2.98, 1.51);       // north, under the window
+  banquette(19.59, 1.51,  1.50, 8.50);       // east, along the dining wall
+  banquette(17.59, 10.01, 3.50, 1.50);       // south return
   for(const pz of [3.2,5.4,7.6]) place(box(0.34,0.92,1.15,M.pillow), 20.72,2.02,pz).rotation.z=-0.16;
-  trestleTable(18.78, 5.65, 2.0, 8.3);       // capsule x17.78..19.78, z1.5..9.8
-  for(const cz of [3.3,5.65,8.0]) chair(16.95, cz, 1);   // open (west) side of the table
-  pendant(18.78,3.66,6.8); pendant(18.78,5.7,6.8); pendant(18.78,7.74,6.8);
+  place(box(2.6,0.9,0.34,M.pillow), 18.1,2.02,0.52);
+  trestleTable(18.41, 5.75, 2.0, 8.4);       // capsule x17.41..19.41, z1.55..9.95
+  for(const cz of [3.4,5.75,8.1]) chair(16.55, cz, 1);   // open (west) side
+  pendant(18.41,3.66,6.8); pendant(18.41,5.7,6.8); pendant(18.41,7.74,6.8);
   // full 11'-9" wall between nook and dining (receptacles wall on plan)
   wallSeg(ZONE_W+WALL_T/2,0, PASS_Z0, false, []);
 }
