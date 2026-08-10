@@ -629,8 +629,12 @@ function fridge(x,z,w=3,d=2.4,faceW=false){
   const H=5.9, GAP=0.05, SIDE=0.04, TOE=0.30, DT=0.17;
   const AW = faceW ? d : w;                       // width across the front
   const put = applFace(x,z,d,faceW);
-  // carcass, set back by the door thickness so the doors read proud
-  if(faceW) place(box(w,H,d,M.applDk), x+DT+(w-DT)/2-DT/2, H/2, z+d/2);
+  // Carcass, set back by the door thickness so the doors read proud. BOTH
+  // branches have to shorten the carcass along its own depth axis. The faceW
+  // branch kept the full depth `w` and only shifted the centre, so its front
+  // face landed exactly on the door fronts — 5.5 sq ft of coincident surface,
+  // invisible on a monitor and a hard strobe in stereo.
+  if(faceW) place(box(w-DT,H,d,M.applDk), x+DT+(w-DT)/2, H/2, z+d/2);
   else      place(box(w,H,d-DT,M.applDk), x+w/2, H/2, z+(d-DT)/2);
   put(AW/2, TOE*0.55, AW-2*SIDE, TOE*0.9, 0.05, M.applDk);          // toe grille
   const fh=1.66, fy=TOE+GAP+fh/2;                                    // freezer drawer
@@ -684,14 +688,17 @@ function wallOven(x,z,w,hEach,y0,alongX=true,out=1){
    counter(...,cut) so the top is built around it. `spout` is the direction the
    faucet points, i.e. away from the wall it stands against. */
 function sink(x,z,w=2.4,d=1.5,spout='z+'){
-  const TOP=CT_H, WT=0.055, DEP=0.72;
-  const cx=x+w/2, cz=z+d/2, bowl=M.basin;
-  // basin shell sits just outside the cutout, so the clear opening is exactly w x d
-  place(box(w+2*WT,WT,d+2*WT,bowl), cx, TOP-DEP-WT/2, cz);            // bottom
-  place(box(WT,DEP,d+2*WT,bowl), x-WT/2,   TOP-DEP/2, cz);            // sides
-  place(box(WT,DEP,d+2*WT,bowl), x+w+WT/2, TOP-DEP/2, cz);
-  place(box(w,DEP,WT,bowl), cx, TOP-DEP/2, z-WT/2);                   // ends
-  place(box(w,DEP,WT,bowl), cx, TOP-DEP/2, z+d+WT/2);
+  const TOP=CT_H, WT=0.055, DEP=0.72, REV=0.012;
+  // The bowl is inset a ~1/8" reveal from the countertop cutout, the way a real
+  // undermount sits under the slab. It used to line up dead flush, which put
+  // the slab's cut edge and the bowl wall on the same plane on all four sides.
+  const bx=x+REV, bz=z+REV, bw=w-2*REV, bd=d-2*REV;
+  const cx=bx+bw/2, cz=bz+bd/2, bowl=M.basin;
+  place(box(bw+2*WT,WT,bd+2*WT,bowl), cx, TOP-DEP-WT/2, cz);          // bottom
+  place(box(WT,DEP,bd+2*WT,bowl), bx-WT/2,    TOP-DEP/2, cz);         // sides
+  place(box(WT,DEP,bd+2*WT,bowl), bx+bw+WT/2, TOP-DEP/2, cz);
+  place(box(bw,DEP,WT,bowl), cx, TOP-DEP/2, bz-WT/2);                 // ends
+  place(box(bw,DEP,WT,bowl), cx, TOP-DEP/2, bz+bd+WT/2);
   const dr=new THREE.Mesh(new THREE.CylinderGeometry(F(0.17),F(0.17),F(0.035),18),M.applDk);
   place(dr, cx, TOP-DEP+0.035, cz).castShadow=false;                  // strainer
   // ---- faucet: escutcheon, column, gooseneck arc, aerator, lever ----
@@ -1622,6 +1629,10 @@ function setupXR(){
       sunLight.shadow.mapSize.set(1024,1024);
       if(sunLight.shadow.map){ sunLight.shadow.map.dispose(); sunLight.shadow.map = null; }
     }
+    // Depth precision scales with the near plane, and stereo makes every
+    // near-coincident surface strobe. 5 cm is a desktop habit; 10 cm is the VR
+    // norm and buys back a full bit of depth buffer everywhere.
+    camera.near = 0.10; camera.updateProjectionMatrix();
     needRecenter = true; foveated = false; headOK = false;
   });
 
@@ -1639,6 +1650,7 @@ function setupXR(){
     if(panel) panel.visible = false;
     xrCtrls.forEach(c=>{ if(c.userData.hmesh) c.userData.hmesh.visible = false; });
     rig.position.set(0,0,0); rig.rotation.set(0,0,0);
+    camera.near = 0.05; camera.updateProjectionMatrix();
     if(sunLight){
       sunLight.shadow.mapSize.set(2048,2048);
       if(sunLight.shadow.map){ sunLight.shadow.map.dispose(); sunLight.shadow.map = null; }
