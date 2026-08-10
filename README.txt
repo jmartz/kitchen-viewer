@@ -38,9 +38,16 @@ FINISHES
   Everything of that kind lights up, and picking a colour changes all of
   them at once - change one cabinet pull and every pull follows.
     Adjustable: cabinets, island, countertops, backsplash, walls,
-    appliances, cabinet hardware, faucet & sink, pendants, bench cushions,
-    sofa, rug, stools & chairs, trim & doors, window frames, fireplace,
-    deck & railing.
+    appliances, cabinet hardware, faucet, sink bowl, pendants, bench
+    cushions, sofa, rug, stools & chairs, trim & doors, window frames,
+    fireplace, deck & railing.
+    Metal things (hardware, faucet, pendants, frames, appliances) get named
+    finishes - Stainless, Chrome, Nickel, Pewter, Brass, Polished brass,
+    Bronze, Matte black - which set the metal response, not just the hue.
+    Appliances can also be painted (white/black/green/navy).
+    Contrast details follow along instead of flattening: the dark reveals
+    between fridge doors and the shaker rails on cabinet fronts take a
+    derived shade of whatever you pick.
     Countertops have 5 styles (white quartz, veined marble, soapstone,
     butcher block, concrete); pendants have 4 shapes.
     Walls have an "All walls / Just this wall" toggle.

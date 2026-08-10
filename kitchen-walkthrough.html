@@ -1600,23 +1600,29 @@ function animate(time, frame){
    §FIN — finish editor: point at something, recolour every one of them
    ------------------------------------------------------------
    Every mesh draws from the shared `M` palette, so "change all the cabinets" is
-   really just M.cab.color. The catch is matFit()/steelFace(), which hand out a
-   per-mesh clone whenever a surface needs world-scale texture repeat; those are
-   tagged with the palette key they came from (userData.baseKey) so a global
-   change can find them too. Miss that and roughly a third of the kitchen quietly
-   ignores you.
+   really just M.cab.color. Three things make it less trivial than that:
 
-   Colour changes apply live. Style changes (countertop material, pendant shape)
-   go through buildOption() because they alter maps or geometry — which is fine,
-   the rebuild is the same one the A/B toggle already uses.
+   1. matFit()/steelFace() hand out a per-mesh clone whenever a surface needs
+      world-scale texture repeat. Those carry userData.baseKey so a global
+      change can find them; miss it and about a third of the kitchen quietly
+      ignores you, countertops worst of all.
 
-   Walls also support a single-instance override: that mesh gets its own cloned
-   material, keyed by a rebuild-stable id derived from its position and size, so
-   "just this wall" survives an A/B toggle.
+   2. Several palette entries exist purely to CONTRAST with their neighbour:
+      applDk is the dark reveal between stainless doors, trimDk is the shaker
+      rail against the door face, pillow is the light cushion on the bench.
+      Painting those the same colour as their partner erases the detail — the
+      fridge becomes one flat slab and the shaker doors go blank. They are
+      `accent` entries now and take a derived shade of the picked colour.
+
+   3. A finish is not just a colour. Metals have almost no diffuse response, so
+      a matte-black paint value on a metalness-0.9 faucet renders as a near
+      black mirror rather than matte black. Metal swatches carry metalness and
+      roughness alongside the colour, so picking "matte black" actually makes
+      the material matte.
    ============================================================ */
 const TEX = {};                 // procedural canvases, filled by makeMaterials()
-const FIN = {};
-let finRev = 0;                  // bumped on every change; the VR panel keys off it                 // kind -> colour hex; plus .styles and .inst
+const FIN = {};                 // kind -> {c,m,r}; plus .styles and .inst
+let finRev = 0;                 // bumped on every change; the VR panel keys off it
 let _MKEY = null;
 function mkey(mat){             // material object -> palette key
   if(!_MKEY){ _MKEY = new Map(); for(const k in M) _MKEY.set(M[k], k); }
@@ -1634,38 +1640,57 @@ const LAMP_STYLES = {
   lantern:{label:'Lantern'}, dome:{label:'Dome'}, cone:{label:'Cone'}, globe:{label:'Globe'}
 };
 
-/* swatch rows, reused across kinds */
+/* paint rows: colour only, the material keeps its own metalness/roughness */
 const SW = {
   neutral:[0xf5f2ec,0xe8e2d6,0xd6cfc2,0xb4a894,0x9a9080,0x6f6a60,0x4a4741,0x2b2926],
   warm:   [0xe6d2ae,0xd9c4a3,0xc79a63,0xa8875a,0x8a6a44,0x6f5638],
   cool:   [0xa9b8c4,0x8494a3,0x5c7185,0x34455a,0x22303c],
-  green:  [0xb3bda6,0x9aa88f,0x6f8069,0x4a5c47,0x33402f],
-  metal:  [0xd9c98f,0xb08d46,0x8a6f36,0xd3d7dc,0xc2c7cd,0x8d939b,0x4a4d52,0x22242a]
+  green:  [0xb3bda6,0x9aa88f,0x6f8069,0x4a5c47,0x33402f]
 };
 const P_PAINT = ['neutral','cool','green','warm'];
 const P_WOOD  = ['warm','neutral','green'];
 
+/* metal presets carry the PBR response, not just the hue */
+const MET = (c,m,r,n) => ({c:c, m:m, r:r, n:n});
+const SW_METAL = [
+  MET(0xc9ccd1,0.85,0.30,'Stainless'),  MET(0xf0f2f4,0.85,0.16,'Chrome'),
+  MET(0x9aa1a9,0.85,0.42,'Nickel'),     MET(0x6e737a,0.80,0.55,'Pewter'),
+  MET(0xb08d46,0.90,0.30,'Brass'),      MET(0xd9c98f,0.90,0.20,'Polished brass'),
+  MET(0x8a6a36,0.85,0.45,'Bronze'),     MET(0x2c2e33,0.45,0.50,'Matte black')
+];
+/* appliances can also be painted, which means dropping the metalness right down */
+const SW_APPL = SW_METAL.concat([
+  MET(0xf3f1ec,0.10,0.45,'White'),      MET(0x26262a,0.12,0.50,'Black'),
+  MET(0x3b5c46,0.12,0.50,'Green'),      MET(0x34455a,0.12,0.50,'Navy')
+]);
+
 const KINDS = {
-  cab:     {label:'Cabinets',        mats:['cab','trimDk'],          rows:P_PAINT},
-  island:  {label:'Island',          mats:['cabIslOak','cabIslNavy'],rows:P_PAINT},
-  top:     {label:'Countertops',     mats:['top'], styles:TOP_STYLES,rows:['neutral']},
-  tile:    {label:'Backsplash',      mats:['tile'],                  rows:P_PAINT},
-  wall:    {label:'Walls',           mats:['wall'], perInstance:true,rows:P_PAINT},
-  appl:    {label:'Appliances',      mats:['appl','applDk'],         rows:['metal','neutral']},
-  hw:      {label:'Cab. hardware',   mats:['brass'],                 rows:['metal']},
-  faucet:  {label:'Faucet & sink',   mats:['faucet','basin'],        rows:['metal']},
-  lamp:    {label:'Pendants',        mats:['lamp'], styles:LAMP_STYLES, rows:['metal']},
-  cushion: {label:'Bench cushions',  mats:['cushion','cushB','pillow'],rows:P_PAINT},
-  sofa:    {label:'Sofa',            mats:['sofa'],                  rows:P_PAINT},
-  rug:     {label:'Rug',             mats:['rug'],                   rows:P_PAINT},
-  seat:    {label:'Stools & chairs', mats:['wood','woodDk'],         rows:P_WOOD},
-  trim:    {label:'Trim & doors',    mats:['trimW','door'],          rows:['neutral','cool']},
-  frame:   {label:'Window frames',   mats:['frame'],                 rows:['metal','neutral']},
-  stone:   {label:'Fireplace',       mats:['stone'],                 rows:['neutral','warm']},
-  deck:    {label:'Deck & railing',  mats:['deck','rail'],           rows:P_WOOD}
+  cab:     {label:'Cabinets',        mats:['cab'],   accent:[['trimDk',0.90]], rows:P_PAINT},
+  island:  {label:'Island',          mats:['cabIslOak','cabIslNavy'],          rows:P_PAINT},
+  top:     {label:'Countertops',     mats:['top'], styles:TOP_STYLES,          rows:['neutral']},
+  tile:    {label:'Backsplash',      mats:['tile'],                            rows:P_PAINT},
+  wall:    {label:'Walls',           mats:['wall'], perInstance:true,          rows:P_PAINT},
+  appl:    {label:'Appliances',      mats:['appl'], accent:[['applDk',0.42]],  metal:SW_APPL},
+  hw:      {label:'Cab. hardware',   mats:['brass'],                           metal:SW_METAL},
+  faucet:  {label:'Faucet',          mats:['faucet'],                          metal:SW_METAL},
+  sink:    {label:'Sink bowl',       mats:['basin'],                           metal:SW_METAL},
+  lamp:    {label:'Pendants',        mats:['lamp'], styles:LAMP_STYLES,        metal:SW_METAL},
+  cushion: {label:'Bench cushions',  mats:['cushion','cushB'], accent:[['pillow',1.22]], rows:P_PAINT},
+  sofa:    {label:'Sofa',            mats:['sofa'],                            rows:P_PAINT},
+  rug:     {label:'Rug',             mats:['rug'],                             rows:P_PAINT},
+  seat:    {label:'Stools & chairs', mats:['wood'], accent:[['woodDk',0.74]],  rows:P_WOOD},
+  trim:    {label:'Trim & doors',    mats:['trimW','door'],                    rows:['neutral','cool']},
+  frame:   {label:'Window frames',   mats:['frame'],                           metal:SW_METAL},
+  stone:   {label:'Fireplace',       mats:['stone'],                           rows:['neutral','warm']},
+  deck:    {label:'Deck & railing',  mats:['deck'], accent:[['rail',0.86]],    rows:P_WOOD}
 };
+/* accents resolve to their parent kind too, so pointing at a dark fridge reveal
+   or a shaker rail selects the thing you meant */
 const MAT2KIND = {};
-for(const k in KINDS) (KINDS[k].mats||[]).forEach(m=>{ if(!MAT2KIND[m]) MAT2KIND[m]=k; });
+for(const k in KINDS){
+  (KINDS[k].mats||[]).forEach(m=>{ if(!MAT2KIND[m]) MAT2KIND[m]=k; });
+  (KINDS[k].accent||[]).forEach(a=>{ if(!MAT2KIND[a[0]]) MAT2KIND[a[0]]=k; });
+}
 const KIND_LIST = Object.keys(KINDS);
 
 let DEFAULTS = null;            // captured once, after convertPBR
@@ -1673,21 +1698,38 @@ function finInit(){
   M.lamp.side = THREE.DoubleSide;          // open dome / cone shades read as solid
   M.lamp.color.copy(M.frame.color);        // matches the old finish-linked default
   DEFAULTS = {};
-  for(const k in M) if(M[k] && M[k].color) DEFAULTS[k] = M[k].color.clone();
+  for(const k in M){
+    const m = M[k]; if(!m || !m.color) continue;
+    DEFAULTS[k] = {c:m.color.clone(), m:m.metalness, r:m.roughness};
+  }
   readURL();
 }
 
 /* ---- colour ---- */
-const _lin = new THREE.Color();
-function linOf(hex){ return _lin.setHex(hex).convertSRGBToLinear(); }
-
-function setKindColor(kind, hex, quiet){
-  finRev++;
+function asSw(v){ return (typeof v === 'number') ? {c:v} : v; }
+function shade(hex, f){
+  const c = new THREE.Color(hex);
+  return new THREE.Color(Math.min(1,c.r*f), Math.min(1,c.g*f), Math.min(1,c.b*f)).getHex();
+}
+/* write colour (+ optional PBR response) to a set of palette keys and their clones */
+function applyToMats(keys, hex, sw){
+  const lin = new THREE.Color(hex).convertSRGBToLinear();
+  const put = m => {
+    if(m.color) m.color.copy(lin);
+    if(sw.m !== undefined && 'metalness' in m) m.metalness = sw.m;
+    if(sw.r !== undefined && 'roughness' in m) m.roughness = sw.r;
+    m.needsUpdate = true;
+  };
+  for(const k of keys){ const m = M[k]; if(m) put(m); }
+  eachClone(keys, mm=>{ if(!mm.userData.pinned) put(mm); });
+}
+function setKindColor(kind, v, quiet){
   const K = KINDS[kind]; if(!K || !K.mats) return;
-  FIN[kind] = hex;
-  const lin = linOf(hex).clone();
-  for(const k of K.mats){ const m=M[k]; if(m && m.color) m.color.copy(lin); }
-  eachClone(K.mats, mm=>{ if(!mm.userData.pinned) mm.color.copy(lin); });
+  finRev++;
+  const sw = asSw(v);
+  FIN[kind] = sw;
+  applyToMats(K.mats, sw.c, sw);
+  if(K.accent) for(const a of K.accent) applyToMats([a[0]], shade(sw.c, a[1]), sw);
   if(!quiet) syncURL();
 }
 /* every per-mesh clone whose base is one of `mats` */
@@ -1718,18 +1760,21 @@ function kindOfMesh(mesh){
   const k = matKeyOf(mesh);
   return k ? (MAT2KIND[k] || null) : null;
 }
-function setInstanceColor(mesh, hex){
-  finRev++;
+function setInstanceColor(mesh, v){
   const baseKey = matKeyOf(mesh); if(!baseKey) return;
+  finRev++;
+  const sw = asSw(v);
   let mm = mesh.material;
   if(!(mm.userData && mm.userData.pinned)){
     mm = mm.clone();
     mm.userData = {baseKey: baseKey, pinned: true};
     mesh.material = mm;
   }
-  mm.color.copy(linOf(hex));
+  mm.color.copy(new THREE.Color(sw.c).convertSRGBToLinear());
+  if(sw.m !== undefined && 'metalness' in mm) mm.metalness = sw.m;
+  if(sw.r !== undefined && 'roughness' in mm) mm.roughness = sw.r;
   FIN.inst = FIN.inst || {};
-  FIN.inst[pidOf(mesh)] = hex;
+  FIN.inst[pidOf(mesh)] = sw;
   syncURL();
 }
 
@@ -1747,7 +1792,7 @@ function applyStyles(){
   const s = (FIN.styles && FIN.styles.top) || 'quartz';
   const t = TOP_STYLES[s] || TOP_STYLES.quartz;
   const m = M.top;
-  if(!FIN.top) m.color.copy(linOf(t.color));     // an explicit colour pick wins
+  if(!FIN.top) m.color.copy(new THREE.Color(t.color).convertSRGBToLinear());
   const cv = TEX[t.tex];
   if(cv){
     const tx = new THREE.CanvasTexture(cv);
@@ -1771,12 +1816,14 @@ function applyFinishes(){
   if(FIN.inst && world){
     world.traverse(o=>{
       if(!o.isMesh || !o.material || Array.isArray(o.material)) return;
-      const hex = FIN.inst[pidOf(o)];
-      if(hex === undefined) return;
+      const sw = FIN.inst[pidOf(o)];
+      if(sw === undefined) return;
       const baseKey = matKeyOf(o);
       const mm = o.material.clone();
       mm.userData = {baseKey: baseKey, pinned: true};
-      mm.color.copy(linOf(hex));
+      mm.color.copy(new THREE.Color(sw.c).convertSRGBToLinear());
+      if(sw.m !== undefined && 'metalness' in mm) mm.metalness = sw.m;
+      if(sw.r !== undefined && 'roughness' in mm) mm.roughness = sw.r;
       o.material = mm;
     });
   }
@@ -1785,32 +1832,50 @@ function applyFinishes(){
 function resetFinishes(){
   finRev++;
   for(const k in FIN) delete FIN[k];
-  if(DEFAULTS) for(const k in DEFAULTS) if(M[k] && M[k].color) M[k].color.copy(DEFAULTS[k]);
+  if(DEFAULTS) for(const k in DEFAULTS){
+    const m = M[k], d = DEFAULTS[k]; if(!m) continue;
+    m.color.copy(d.c);
+    if(d.m !== undefined && 'metalness' in m) m.metalness = d.m;
+    if(d.r !== undefined && 'roughness' in m) m.roughness = d.r;
+    m.needsUpdate = true;
+  }
   applyStyles();
   syncURL();
   buildOption(current);
 }
 
-/* ---- URL hash, so a scheme can be texted to someone ---- */
+/* ---- URL hash, so a scheme can be texted to someone ----
+   key-RRGGBB, or key-RRGGBB,metal,rough with the two PBR terms as hundredths */
 let _urlLock = false;
+function encSw(sw){
+  const h = sw.c.toString(16).padStart(6,'0');
+  return (sw.m === undefined) ? h
+       : h + ',' + Math.round(sw.m*100) + ',' + Math.round(sw.r*100);
+}
+function decSw(s){
+  const p = s.split(',');
+  const sw = {c: parseInt(p[0],16)};
+  if(p.length === 3){ sw.m = (+p[1])/100; sw.r = (+p[2])/100; }
+  return sw;
+}
 function syncURL(){
   if(_urlLock) return;
   const parts = [];
-  for(const k of KIND_LIST) if(FIN[k] !== undefined) parts.push(k+'-'+FIN[k].toString(16).padStart(6,'0'));
+  for(const k of KIND_LIST) if(FIN[k]) parts.push(k+'-'+encSw(FIN[k]));
   if(FIN.styles) for(const k in FIN.styles) parts.push('s.'+k+'-'+FIN.styles[k]);
-  if(FIN.inst) for(const id in FIN.inst) parts.push('i.'+encodeURIComponent(id)+'-'+FIN.inst[id].toString(16).padStart(6,'0'));
+  if(FIN.inst) for(const id in FIN.inst) parts.push('i.'+encodeURIComponent(id)+'-'+encSw(FIN.inst[id]));
   const h = parts.length ? '#f='+parts.join('~') : '';
   try{ history.replaceState(null,'',location.pathname+location.search+h); }catch(e){}
 }
 function readURL(){
-  const m = /[#&]f=([^&]+)/.exec(location.hash); if(!m) { applyStyles(); return; }
+  const m = /[#&]f=([^&]+)/.exec(location.hash); if(!m){ applyStyles(); return; }
   _urlLock = true;
   for(const tok of decodeURIComponent(m[1]).split('~')){
     const i = tok.lastIndexOf('-'); if(i < 0) continue;
     const key = tok.slice(0,i), val = tok.slice(i+1);
     if(key.startsWith('s.')){ FIN.styles = FIN.styles||{}; FIN.styles[key.slice(2)] = val; }
-    else if(key.startsWith('i.')){ FIN.inst = FIN.inst||{}; FIN.inst[decodeURIComponent(key.slice(2))] = parseInt(val,16); }
-    else if(KINDS[key]) FIN[key] = parseInt(val,16);
+    else if(key.startsWith('i.')){ FIN.inst = FIN.inst||{}; FIN.inst[decodeURIComponent(key.slice(2))] = decSw(val); }
+    else if(KINDS[key]) FIN[key] = decSw(val);
   }
   _urlLock = false;
   applyStyles();
@@ -1819,18 +1884,16 @@ function readURL(){
 /* ---- selection + highlight ---- */
 let selKind = null, selMesh = null, pickMode = false, wallScope = 'all';
 const _fray = new THREE.Raycaster();
-const HL = new THREE.Color(0x3a2a08);
+const HL = new THREE.Color(0x3a2a08), NOHL = new THREE.Color(0x000000);
 
 function setHighlight(kind, on){
   const K = KINDS[kind]; if(!K || !K.mats) return;
-  const c = on ? HL : null;
-  for(const k of K.mats){ const m=M[k]; if(m && m.emissive) m.emissive.copy(c||new THREE.Color(0));
-    if(m) m.needsUpdate = true; }
-  eachClone(K.mats, mm=>{ if(mm.emissive) mm.emissive.copy(c||new THREE.Color(0)); });
+  const keys = K.mats.concat((K.accent||[]).map(a=>a[0]));
+  const c = on ? HL : NOHL;
+  for(const k of keys){ const m=M[k]; if(m && m.emissive){ m.emissive.copy(c); m.needsUpdate=true; } }
+  eachClone(keys, mm=>{ if(mm.emissive) mm.emissive.copy(c); });
 }
-function clearHighlight(){
-  for(const kind of KIND_LIST) setHighlight(kind, false);
-}
+function clearHighlight(){ for(const kind of KIND_LIST) setHighlight(kind, false); }
 function selectKind(kind, mesh){
   if(selKind && selKind !== kind) setHighlight(selKind, false);
   selKind = kind; selMesh = mesh || null;
@@ -1853,23 +1916,23 @@ function pickHits(){
   }
   return null;
 }
-/* ray -> {mesh, kind}; skips anything with no adjustable finish */
 function pickRay(origin, dir){
   if(!world) return null;
   _fray.set(origin, dir);
   return pickHits();
 }
-/* apply the current swatch choice, honouring the wall "this one / all" scope */
-function applyPick(hex){
+/* apply the current swatch, honouring the wall "this one / all" scope */
+function applyPick(sw){
   if(!selKind) return;
-  if(KINDS[selKind].perInstance && wallScope === 'one' && selMesh) setInstanceColor(selMesh, hex);
-  else setKindColor(selKind, hex);
+  if(KINDS[selKind].perInstance && wallScope === 'one' && selMesh) setInstanceColor(selMesh, sw);
+  else setKindColor(selKind, sw);
   onSelectionChanged();
 }
 function swatchesFor(kind){
   const K = KINDS[kind]; if(!K) return [];
+  if(K.metal) return K.metal;
   const out = [];
-  for(const r of (K.rows||['neutral'])) for(const c of SW[r]) out.push(c);
+  for(const r of (K.rows||['neutral'])) for(const c of SW[r]) out.push({c:c});
   return out;
 }
 
@@ -1910,11 +1973,11 @@ function onSelectionChanged(){
   }
   const swEl = el('finSw');
   swEl.innerHTML = '';
-  if(K) for(const c of swatchesFor(selKind)){
+  if(K) for(const sw of swatchesFor(selKind)){
     const b = document.createElement('button');
-    b.style.background = '#' + c.toString(16).padStart(6,'0');
-    b.title = b.style.background;
-    b.onclick = () => applyPick(c);
+    b.style.background = '#' + sw.c.toString(16).padStart(6,'0');
+    b.title = sw.n || b.style.background;
+    b.onclick = () => applyPick(sw);
     swEl.appendChild(b);
   }
   el('finAll').classList.toggle('on', wallScope === 'all');
@@ -1952,7 +2015,7 @@ function finDesktopEvents(){
     else toast(url, 8000);
   });
   const pick = document.getElementById('finPick');
-  if(pick) pick.oninput = e => applyPick(parseInt(e.target.value.slice(1),16));
+  if(pick) pick.oninput = e => applyPick({c: parseInt(e.target.value.slice(1),16)});
 }
 
 /* ============================================================
@@ -2256,7 +2319,7 @@ function panelItems(){
     const sw=swatchesFor(selKind), COLS=8, cw=(PC_W-16-(COLS-1)*4)/COLS, ch=22;
     sw.slice(0,COLS*3).forEach((c,i)=>{
       const r=Math.floor(i/COLS), q=i%COLS;
-      items.push({x:8+q*(cw+4), y:144+r*(ch+4), w:cw, h:ch, swatch:c, act:()=>applyPick(c)});
+      items.push({x:8+q*(cw+4), y:144+r*(ch+4), w:cw, h:ch, swatch:c.c, act:()=>applyPick(c)});
     });
   }
   bar(0,'BACK','done', ()=>{ panelPage='main'; pickMode=false; clearHighlight();

@@ -205,8 +205,27 @@ Point at a surface, recolour every one of them. Works on desktop (click + HTML
 panel) and in VR (pinch + wrist-panel swatches); both drive the same engine.
 
 - **Why it's cheap**: every mesh already draws from the shared `M` palette, so
-  "all cabinets" is just `M.cab.color`. 17 kinds in `KINDS`, each mapping to one
-  or more palette keys; `MAT2KIND` inverts it for hit-testing.
+  "all cabinets" is just `M.cab.color`. 18 kinds in `KINDS`, each mapping to one
+  or more palette keys; `MAT2KIND` inverts it for hit-testing (accent keys map to
+  their parent kind, so clicking a dark fridge reveal selects Appliances).
+- **L15 — a finish is not a colour, and neighbours aren't interchangeable.** Two
+  failures shipped together in the first cut and both look like "the picker is
+  broken":
+  - *Collapsed contrast.* Several palette entries exist purely to contrast with
+    their partner — `applDk` is the dark reveal between stainless doors, `trimDk`
+    is the shaker rail against the door face, `pillow` is the light cushion on the
+    bench. Painting them the same colour erased the detail: the fridge became one
+    flat slab and the shaker doors went blank. They're `accent:[[key,factor]]`
+    entries now and take a derived shade (`shade()`), so contrast survives any
+    colour. `basin` was worse — it was bundled into the faucet kind, so a black
+    faucet turned the sink bowl black; it's its own `sink` kind.
+  - *The metal trap.* Metals have almost no diffuse response, so a matte-black
+    paint value on a metalness-0.9 faucet renders as a near-black mirror, not
+    matte black. Metal kinds now use presets carrying `{c, m, r}` (Stainless,
+    Chrome, Nickel, Pewter, Brass, Polished brass, Bronze, Matte black; appliances
+    add painted options that drop metalness to ~0.12). `applyToMats()` writes all
+    three, to bases and clones alike, and the URL encodes them as
+    `key-RRGGBB,metal,rough` in hundredths.
 - **The one real trap**: `matFit()`/`steelFace()` hand out a per-mesh *clone*
   whenever a surface needs world-scale texture repeat. Change only the base and
   roughly a third of the kitchen silently ignores you — countertops especially,
