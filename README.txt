@@ -33,6 +33,20 @@ CONTROLS
   Option A/B, views (Walk / 3D top / 2D plan), island finish, plan-floor
   and X-ray overlays.
 
+FINISHES
+  Click "Finishes" in the top-left panel, then click anything in the room.
+  Everything of that kind lights up, and picking a colour changes all of
+  them at once - change one cabinet pull and every pull follows.
+    Adjustable: cabinets, island, countertops, backsplash, walls,
+    appliances, cabinet hardware, faucet & sink, pendants, bench cushions,
+    sofa, rug, stools & chairs, trim & doors, window frames, fireplace,
+    deck & railing.
+    Countertops have 5 styles (white quartz, veined marble, soapstone,
+    butcher block, concrete); pendants have 4 shapes.
+    Walls have an "All walls / Just this wall" toggle.
+  "Copy link" puts the whole scheme in the URL - send it to someone or
+  open it in the headset and it comes back exactly. "Reset all" undoes it.
+
 IN VR (Meta Quest) - hands or controllers, either works
   Open https://jmartz.github.io/kitchen-viewer/ in the Quest Browser and tap
   the gold "Enter VR" button. NOT the localhost/LAN address - WebXR needs

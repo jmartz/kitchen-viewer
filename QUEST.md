@@ -32,7 +32,27 @@ hand is tracked). It shows which option is live, and has three buttons you press
 |---|---|
 | **A / B** | swap Option A ⇄ Option B — the whole point; stand in one spot and flip |
 | **PLAN** | drops the scanned S2.2 sheet on the floor at 1:1 underfoot |
+| **FINISH** | opens the finish picker — see below |
 | **EXIT VR** | ends the session and drops you back to the browser |
+
+## Changing finishes in VR
+
+Poke **FINISH**, then point at anything in the room and **pinch**. Every surface
+of that kind lights up so you can see what's about to change, and the panel fills
+with swatches — poke one and they all change together. Change one cabinet pull and
+every pull in the kitchen follows.
+
+Countertops and pendants also get a **style** row (white quartz / veined marble /
+soapstone / butcher block / concrete, and four pendant shapes). Walls get an
+**ALL WALLS / THIS WALL** toggle so you can do a single accent wall.
+
+**BACK** returns to the main page, **RESET** puts everything back to default.
+
+While the finish picker is open, pinching points and selects instead of
+teleporting — poke BACK when you want to walk again.
+
+Every choice is stored in the page URL, so a scheme picked at the laptop opens in
+the headset (and vice versa) if you use the same link.
 
 ## Getting out
 

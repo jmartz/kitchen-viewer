@@ -54,6 +54,32 @@
     letter-spacing:0;font-size:12px;padding:9px 18px;box-shadow:none}
   body.xr #hud, body.xr #map, body.xr #hint, body.xr #stick{display:none}
   body.xr #btnVR{background:transparent;color:var(--accent)}
+  body.xr #fin{display:none}
+  /* finish editor */
+  #fin{position:fixed;left:14px;bottom:14px;z-index:11;width:262px;display:none;
+    background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--line);
+    border-radius:10px;padding:12px}
+  #fin h2{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+    color:rgba(245,242,236,.55);margin-bottom:7px}
+  #finKind{font-size:14px;font-weight:600;color:var(--accent);margin-bottom:8px}
+  #finSw{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-bottom:9px}
+  #finSw button{aspect-ratio:1;border-radius:4px;border:1px solid rgba(0,0,0,.35);
+    cursor:pointer;padding:0}
+  #finSw button:hover{outline:2px solid var(--accent);outline-offset:1px}
+  #finStyles{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:9px}
+  #finStyles button{padding:5px 9px;font-size:11px;border-radius:6px;cursor:pointer;
+    border:1px solid var(--line);background:transparent;color:rgba(245,242,236,.75)}
+  #finStyles button.on{border-color:var(--accent);color:var(--accent)}
+  #finScope{display:flex;gap:6px;margin-bottom:9px}
+  #finScope button{flex:1;padding:5px 0;font-size:11px;border-radius:6px;cursor:pointer;
+    border:1px solid var(--line);background:transparent;color:rgba(245,242,236,.75)}
+  #finScope button.on{border-color:var(--accent);color:var(--accent)}
+  #finRow{display:flex;gap:6px;align-items:center}
+  #finRow input[type=color]{width:34px;height:26px;padding:0;border:1px solid var(--line);
+    border-radius:6px;background:transparent;cursor:pointer}
+  #finRow button{flex:1;padding:6px 0;font-size:11px;border-radius:6px;cursor:pointer;
+    border:1px solid var(--line);background:transparent;color:rgba(245,242,236,.75)}
+  #finHint{font-size:11px;line-height:1.45;color:rgba(245,242,236,.6)}
   #map{position:fixed;top:14px;right:14px;z-index:10;border-radius:10px;
     border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(10px)}
   #stick{position:fixed;z-index:9;width:110px;height:110px;border-radius:50%;
@@ -90,6 +116,9 @@
     <button id="btnPdfFloor">Plan floor</button>
     <button id="btnXray">X-ray</button>
   </div>
+  <div class="row2" style="margin-top:6px">
+    <button id="btnFinish">Finishes</button>
+  </div>
   <div style="margin-top:9px;font-size:10px;letter-spacing:.05em;color:rgba(245,242,236,.55)">
     LENS <span id="fovval" style="float:right;color:rgba(245,242,236,.8)">56&deg;</span></div>
   <input id="fov" type="range" min="42" max="75" value="56"
@@ -100,6 +129,23 @@
 <canvas id="map" width="220" height="150"></canvas>
 <div id="hint">Drag to look around · WASD / arrows to move · Shift runs</div>
 <button id="btnVR">Enter VR</button>
+
+<div id="fin">
+  <h2>Finishes</h2>
+  <div id="finKind"></div>
+  <div id="finHint">Click anything in the room to pick its finish.</div>
+  <div id="finStyles"></div>
+  <div id="finScope">
+    <button id="finAll" class="on">All walls</button>
+    <button id="finOne">Just this wall</button>
+  </div>
+  <div id="finSw"></div>
+  <div id="finRow">
+    <input type="color" id="finPick" value="#e8e2d6" title="Custom colour">
+    <button id="finCopy">Copy link</button>
+    <button id="finReset">Reset all</button>
+  </div>
+</div>
 <div id="stick"><div id="knob"></div></div>
 <div id="toast" style="position:fixed;right:14px;bottom:14px;z-index:20;display:none;
   max-width:280px;background:var(--panel);border:1px solid var(--line);border-radius:9px;
@@ -143,6 +189,11 @@ function makeMaterials(){
   M.applGl = new THREE.MeshPhongMaterial({color:0x14161a,shininess:120}); // oven & cooktop glass
   M.brass  = new THREE.MeshPhongMaterial({color:0xb08d46,shininess:85});
   M.black  = new THREE.MeshPhongMaterial({color:0x22242a,shininess:30});
+  // Split out of M.brass / the inline rug so the finish editor can drive each
+  // independently — faucet finish and cabinet hardware are separate decisions.
+  M.faucet = new THREE.MeshPhongMaterial({color:0xb08d46,shininess:85});
+  M.lamp   = new THREE.MeshPhongMaterial({color:0x6b6f63,shininess:40});
+  M.rug    = new THREE.MeshLambertMaterial({color:0x9c8a74});
   M.wood   = new THREE.MeshLambertMaterial({color:0xb08d5e});
   M.woodDk = new THREE.MeshLambertMaterial({color:0x7d6140});
   M.cushion= new THREE.MeshLambertMaterial({color:0xb9a98d});
@@ -336,6 +387,8 @@ function makeMaterials(){
   const T=(c,rx,ry)=>{const t=new THREE.CanvasTexture(c);
     t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(rx,ry); return t;};
   M.appl.map=T(applC,1,1);
+  // hand the procedural canvases to the finish editor (countertop styles)
+  TEX.grain=grainC; TEX.plaster=plasterC; TEX.vein=veinC; TEX.weave=weaveC; TEX.brush=brushC;
   M.wall.map=T(plasterC,5,3);  M.wallX.map=T(plasterC,5,3);  M.ceil.map=T(plasterC,4,4);
   M.cab.map=T(plasterC,2.4,2.4);
   M.cabIslNavy.map=T(plasterC,2,2);
@@ -406,7 +459,7 @@ function convertPBR(){
     top:{cls:'phys',r:.26,cc:.55,ccr:.3,b:.005},
     steel:{r:.38,m:.75,e:1.1},brass:{r:.3,m:.9,e:1.1},black:{r:.38,m:.25},
     appl:{r:.30,m:.80,e:1.35},applDk:{r:.5,m:.6,e:.9},applGl:{cls:'phys',r:.09,m:.35,cc:.9,ccr:.06,e:1.5},
-    basin:{r:.34,m:.72,e:.75},
+    basin:{r:.34,m:.72,e:.75},faucet:{r:.3,m:.9,e:1.1},lamp:{r:.45,m:.6,e:1.0},rug:{r:1,b:.01},
     wood:{r:.62,b:.02},woodDk:{r:.68,b:.02},cushion:{r:1,b:.012},cushB:{r:1,b:.012},
     pillow:{r:1,b:.012},sofa:{r:1,b:.014},woven:{r:.95},door:{r:.6,b:.003},trimW:{r:.5,b:.003},frame:{r:.45,m:.5},
     rail:{r:.85,b:.015},trimDk:{r:.55,b:.003},stone:{r:.97,b:.05},beam:{r:.85,b:.02},plank:{r:.88,b:.015},
@@ -436,6 +489,7 @@ function steelFace(wFt,hFt){
   const base=M.appl;
   if(!base.clone||!base.map) return base;
   const m=base.clone();
+  m.userData = {baseKey:'appl'};
   m.map=base.map.clone(); m.map.needsUpdate=true;
   m.map.wrapS=m.map.wrapT=THREE.RepeatWrapping;
   m.map.repeat.set(Math.max(0.4,wFt/1.6), 1);
@@ -446,6 +500,7 @@ function steelFace(wFt,hFt){
 function matFit(base,wFt,hFt,tileFt){
   if(!base.clone||!base.map) return base;
   const m2=base.clone();
+  m2.userData = {baseKey: mkey(base)};   // so the finish editor can find clones
   m2.map=base.map.clone(); m2.map.needsUpdate=true;
   m2.map.repeat.set(Math.max(0.25,wFt/tileFt), Math.max(0.25,hFt/tileFt));
   if(base.bumpMap){ m2.bumpMap=m2.map; }
@@ -708,9 +763,9 @@ function sink(x,z,w=2.4,d=1.5,spout='z+'){
   const BOFF=0.28;                                                    // behind the cutout
   const fx = sx ? (sx>0 ? x-BOFF : x+w+BOFF) : cx;
   const fz = sz ? (sz>0 ? z-BOFF : z+d+BOFF) : cz;
-  const esc=new THREE.Mesh(new THREE.CylinderGeometry(F(0.17),F(0.19),F(0.06),20),M.brass);
+  const esc=new THREE.Mesh(new THREE.CylinderGeometry(F(0.17),F(0.19),F(0.06),20),M.faucet);
   place(esc, fx, TOP+0.03, fz).castShadow=false;
-  const col=new THREE.Mesh(new THREE.CylinderGeometry(F(0.075),F(0.082),F(0.95),16),M.brass);
+  const col=new THREE.Mesh(new THREE.CylinderGeometry(F(0.075),F(0.082),F(0.95),16),M.faucet);
   place(col, fx, TOP+0.475, fz).castShadow=false;
   const R=0.40, neck=TOP+0.95;
   const arc=[];
@@ -719,13 +774,13 @@ function sink(x,z,w=2.4,d=1.5,spout='z+'){
     arc.push(new THREE.Vector3(F(fx+sx*(R-R*Math.cos(a))), F(neck+R*Math.sin(a)),
                                F(fz+sz*(R-R*Math.cos(a)))));
   }
-  const gn=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(arc),28,F(0.072),12,false),M.brass);
+  const gn=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(arc),28,F(0.072),12,false),M.faucet);
   gn.castShadow=false; world.add(gn);
-  const aer=new THREE.Mesh(new THREE.CylinderGeometry(F(0.088),F(0.078),F(0.17),14),M.brass);
+  const aer=new THREE.Mesh(new THREE.CylinderGeometry(F(0.088),F(0.078),F(0.17),14),M.faucet);
   place(aer, fx+sx*2*R, neck-0.08, fz+sz*2*R).castShadow=false;
   const lev=[new THREE.Vector3(F(fx+px*0.05),F(TOP+0.60),F(fz+pz*0.05)),
              new THREE.Vector3(F(fx+px*0.36),F(TOP+0.72),F(fz+pz*0.36))];
-  const lm=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lev),8,F(0.033),8,false),M.brass);
+  const lm=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lev),8,F(0.033),8,false),M.faucet);
   lm.castShadow=false; world.add(lm);
 }
 /* dishwasher front, proud of the cabinet face. (x,z) is the face plane, `out`
@@ -827,23 +882,40 @@ function trestleTable(cx,cz,w,d){ // pedestal table: center posts, clear slide-i
   }
   solid(cx-w/2,cz-d/2,w,d);
 }
-function pendant(x,z,y=6.5){ // lantern: corner posts + square rims, no shadows
+/* Overhead fixture. Shade geometry switches on FIN.lampStyle; the metal is
+   always M.lamp so the finish picker drives every style the same way. */
+function pendant(x,z,y=6.5){
   const pput=(m,a,b2,c)=>{ m.castShadow=false; return place(m,a,b2,c); };
-  const fm = (finish==='navy') ? M.brass : M.frame;
+  const mesh=(g,mat)=>new THREE.Mesh(g,mat);
+  const fm = M.lamp, style = FIN.lampStyle || 'lantern';
   const H=1.1, Wd=0.8, B=0.09;
-  const cord=new THREE.Mesh(new THREE.CylinderGeometry(F(0.045),F(0.045),F(CEIL-y-H),8),fm);
+  const cord=mesh(new THREE.CylinderGeometry(F(0.045),F(0.045),F(CEIL-y-H),8),fm);
   pput(cord,x,(CEIL+y+H)/2,z);
-  for(const cnr of [[-1,-1],[1,-1],[-1,1],[1,1]])
-    pput(box(B,H,B,fm), x+cnr[0]*Wd/2, y+H/2, z+cnr[1]*Wd/2);
-  for(const yy of [y,y+H]){                       // square rims flush with posts
-    pput(box(Wd+B,B,B,fm), x, yy, z-Wd/2);
-    pput(box(Wd+B,B,B,fm), x, yy, z+Wd/2);
-    pput(box(B,B,Wd-B,fm), x-Wd/2, yy, z);
-    pput(box(B,B,Wd-B,fm), x+Wd/2, yy, z);
+  if(style==='lantern'){
+    for(const cnr of [[-1,-1],[1,-1],[-1,1],[1,1]])
+      pput(box(B,H,B,fm), x+cnr[0]*Wd/2, y+H/2, z+cnr[1]*Wd/2);
+    for(const yy of [y,y+H]){                     // square rims flush with posts
+      pput(box(Wd+B,B,B,fm), x, yy, z-Wd/2);
+      pput(box(Wd+B,B,B,fm), x, yy, z+Wd/2);
+      pput(box(B,B,Wd-B,fm), x-Wd/2, yy, z);
+      pput(box(B,B,Wd-B,fm), x+Wd/2, yy, z);
+    }
+    pput(box(Wd,0.07,0.07,fm), x, y+H, z);        // top strap to cord
+    pput(box(0.56,0.78,0.56,M.glass), x, y+H*0.5, z);
+  } else if(style==='dome'){                      // schoolhouse: open dome, wide
+    const g=new THREE.SphereGeometry(F(0.62),22,12,0,Math.PI*2,0,Math.PI/2);
+    const d=mesh(g,fm); d.rotation.x=Math.PI;    // M.lamp is DoubleSide, see finInit
+    pput(d,x,y+H*0.92,z);
+    pput(mesh(new THREE.CylinderGeometry(F(0.10),F(0.10),F(0.14),12),fm), x,y+H,z);
+  } else if(style==='cone'){                      // tapered metal cone
+    const g=new THREE.CylinderGeometry(F(0.16),F(0.60),F(0.72),24,1,true);
+    pput(mesh(g,fm),x,y+H*0.62,z);
+    pput(mesh(new THREE.CylinderGeometry(F(0.09),F(0.09),F(0.16),12),fm), x,y+H,z);
+  } else {                                        // globe: blown-glass sphere
+    pput(mesh(new THREE.SphereGeometry(F(0.46),20,14),M.glass), x, y+H*0.5, z);
+    pput(mesh(new THREE.CylinderGeometry(F(0.20),F(0.14),F(0.16),16),fm), x,y+H*0.95,z);
   }
-  pput(box(Wd,0.07,0.07,fm), x, y+H, z);          // top strap to cord
-  pput(box(0.56,0.78,0.56,M.glass), x, y+H*0.5, z);
-  const bulb=new THREE.Mesh(new THREE.SphereGeometry(F(0.15),10,10),M.lightE);
+  const bulb=mesh(new THREE.SphereGeometry(F(0.15),10,10),M.lightE);
   pput(bulb,x,y+H*0.46,z);
 }
 function recessed(x,z){
@@ -1043,7 +1115,7 @@ function buildShared(opt){
   tv(13.7, SOUTH-WALL_T/2, 3.75, 85, true, -1);   // 85" flatscreen, south wall
   outlet(6.35,13.6,1.3,false); outlet(20.9,20.0,1.3,false);
   outlet(13.5,SOUTH-0.28,1.3,true);
-  const rug=new THREE.Mesh(new THREE.PlaneGeometry(F(6),F(9)),new THREE.MeshLambertMaterial({color:0x9c8a74}));
+  const rug=new THREE.Mesh(new THREE.PlaneGeometry(F(6),F(9)),M.rug);
   rug.rotation.x=-Math.PI/2; place(rug,12,0.02,ZONE_D+10.7);
 
   // ---- deck railing + stairs (NW corner, 3'-0" wide) ----
@@ -1220,6 +1292,7 @@ let scene, camera, renderer, current='A', finish='oak', sunLight=null;
 function init(){
   makeMaterials();
   convertPBR();
+  finInit();
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xcfe0ea).convertSRGBToLinear();
   scene.fog = new THREE.Fog(0xcfe0ea, 18, 60);
@@ -1286,6 +1359,7 @@ function init(){
   initPlanControls();
   loadExternalTextures();
   respawn();
+  finDesktopEvents();
   setupXR();
   renderer.setAnimationLoop(animate);   // must drive the loop; rAF never fires in XR
 }
@@ -1294,6 +1368,7 @@ function buildOption(key){
   world = new THREE.Group(); solids = [];
   buildShared(key); OPTS[key].build();
   scene.add(world);
+  applyFinishes();          // colours survive an A/B or finish rebuild
   document.getElementById('optdesc').textContent = OPTS[key].desc;
   drawMapStatic();
   if(planMode) drawPlan();
@@ -1522,6 +1597,365 @@ function animate(time, frame){
 }
 
 /* ============================================================
+   §FIN — finish editor: point at something, recolour every one of them
+   ------------------------------------------------------------
+   Every mesh draws from the shared `M` palette, so "change all the cabinets" is
+   really just M.cab.color. The catch is matFit()/steelFace(), which hand out a
+   per-mesh clone whenever a surface needs world-scale texture repeat; those are
+   tagged with the palette key they came from (userData.baseKey) so a global
+   change can find them too. Miss that and roughly a third of the kitchen quietly
+   ignores you.
+
+   Colour changes apply live. Style changes (countertop material, pendant shape)
+   go through buildOption() because they alter maps or geometry — which is fine,
+   the rebuild is the same one the A/B toggle already uses.
+
+   Walls also support a single-instance override: that mesh gets its own cloned
+   material, keyed by a rebuild-stable id derived from its position and size, so
+   "just this wall" survives an A/B toggle.
+   ============================================================ */
+const TEX = {};                 // procedural canvases, filled by makeMaterials()
+const FIN = {};
+let finRev = 0;                  // bumped on every change; the VR panel keys off it                 // kind -> colour hex; plus .styles and .inst
+let _MKEY = null;
+function mkey(mat){             // material object -> palette key
+  if(!_MKEY){ _MKEY = new Map(); for(const k in M) _MKEY.set(M[k], k); }
+  return _MKEY.get(mat);
+}
+
+const TOP_STYLES = {
+  quartz:  {label:'White quartz',  color:0xf7f5f0, tex:'vein',    rep:6,   r:0.26, cc:0.55},
+  marble:  {label:'Veined marble', color:0xe4e2df, tex:'vein',    rep:3.2, r:0.18, cc:0.70},
+  soap:    {label:'Soapstone',     color:0x3f464b, tex:'plaster', rep:4,   r:0.50, cc:0.15},
+  butcher: {label:'Butcher block', color:0xc0904f, tex:'grain',   rep:2.2, r:0.62, cc:0.10},
+  concrete:{label:'Concrete',      color:0x9d9a94, tex:'plaster', rep:5,   r:0.78, cc:0.04}
+};
+const LAMP_STYLES = {
+  lantern:{label:'Lantern'}, dome:{label:'Dome'}, cone:{label:'Cone'}, globe:{label:'Globe'}
+};
+
+/* swatch rows, reused across kinds */
+const SW = {
+  neutral:[0xf5f2ec,0xe8e2d6,0xd6cfc2,0xb4a894,0x9a9080,0x6f6a60,0x4a4741,0x2b2926],
+  warm:   [0xe6d2ae,0xd9c4a3,0xc79a63,0xa8875a,0x8a6a44,0x6f5638],
+  cool:   [0xa9b8c4,0x8494a3,0x5c7185,0x34455a,0x22303c],
+  green:  [0xb3bda6,0x9aa88f,0x6f8069,0x4a5c47,0x33402f],
+  metal:  [0xd9c98f,0xb08d46,0x8a6f36,0xd3d7dc,0xc2c7cd,0x8d939b,0x4a4d52,0x22242a]
+};
+const P_PAINT = ['neutral','cool','green','warm'];
+const P_WOOD  = ['warm','neutral','green'];
+
+const KINDS = {
+  cab:     {label:'Cabinets',        mats:['cab','trimDk'],          rows:P_PAINT},
+  island:  {label:'Island',          mats:['cabIslOak','cabIslNavy'],rows:P_PAINT},
+  top:     {label:'Countertops',     mats:['top'], styles:TOP_STYLES,rows:['neutral']},
+  tile:    {label:'Backsplash',      mats:['tile'],                  rows:P_PAINT},
+  wall:    {label:'Walls',           mats:['wall'], perInstance:true,rows:P_PAINT},
+  appl:    {label:'Appliances',      mats:['appl','applDk'],         rows:['metal','neutral']},
+  hw:      {label:'Cab. hardware',   mats:['brass'],                 rows:['metal']},
+  faucet:  {label:'Faucet & sink',   mats:['faucet','basin'],        rows:['metal']},
+  lamp:    {label:'Pendants',        mats:['lamp'], styles:LAMP_STYLES, rows:['metal']},
+  cushion: {label:'Bench cushions',  mats:['cushion','cushB','pillow'],rows:P_PAINT},
+  sofa:    {label:'Sofa',            mats:['sofa'],                  rows:P_PAINT},
+  rug:     {label:'Rug',             mats:['rug'],                   rows:P_PAINT},
+  seat:    {label:'Stools & chairs', mats:['wood','woodDk'],         rows:P_WOOD},
+  trim:    {label:'Trim & doors',    mats:['trimW','door'],          rows:['neutral','cool']},
+  frame:   {label:'Window frames',   mats:['frame'],                 rows:['metal','neutral']},
+  stone:   {label:'Fireplace',       mats:['stone'],                 rows:['neutral','warm']},
+  deck:    {label:'Deck & railing',  mats:['deck','rail'],           rows:P_WOOD}
+};
+const MAT2KIND = {};
+for(const k in KINDS) (KINDS[k].mats||[]).forEach(m=>{ if(!MAT2KIND[m]) MAT2KIND[m]=k; });
+const KIND_LIST = Object.keys(KINDS);
+
+let DEFAULTS = null;            // captured once, after convertPBR
+function finInit(){
+  M.lamp.side = THREE.DoubleSide;          // open dome / cone shades read as solid
+  M.lamp.color.copy(M.frame.color);        // matches the old finish-linked default
+  DEFAULTS = {};
+  for(const k in M) if(M[k] && M[k].color) DEFAULTS[k] = M[k].color.clone();
+  readURL();
+}
+
+/* ---- colour ---- */
+const _lin = new THREE.Color();
+function linOf(hex){ return _lin.setHex(hex).convertSRGBToLinear(); }
+
+function setKindColor(kind, hex, quiet){
+  finRev++;
+  const K = KINDS[kind]; if(!K || !K.mats) return;
+  FIN[kind] = hex;
+  const lin = linOf(hex).clone();
+  for(const k of K.mats){ const m=M[k]; if(m && m.color) m.color.copy(lin); }
+  eachClone(K.mats, mm=>{ if(!mm.userData.pinned) mm.color.copy(lin); });
+  if(!quiet) syncURL();
+}
+/* every per-mesh clone whose base is one of `mats` */
+function eachClone(mats, fn){
+  if(!world) return;
+  const seen = new Set();
+  world.traverse(o=>{
+    const mm = o.material; if(!mm || Array.isArray(mm) || seen.has(mm)) return;
+    seen.add(mm);
+    const bk = mm.userData && mm.userData.baseKey;
+    if(bk && mats.indexOf(bk) >= 0) fn(mm, o);
+  });
+}
+
+/* ---- per-instance override (walls) ---- */
+function pidOf(mesh){
+  if(mesh.userData._pid) return mesh.userData._pid;
+  const p = mesh.position, g = (mesh.geometry && mesh.geometry.parameters) || {};
+  const r = v => Math.round((v||0)*1000);
+  const id = [matKeyOf(mesh), r(p.x),r(p.y),r(p.z), r(g.width),r(g.height),r(g.depth)].join(',');
+  return (mesh.userData._pid = id);
+}
+function matKeyOf(mesh){
+  const mm = mesh.material; if(!mm || Array.isArray(mm)) return null;
+  return (mm.userData && mm.userData.baseKey) || mkey(mm) || null;
+}
+function kindOfMesh(mesh){
+  const k = matKeyOf(mesh);
+  return k ? (MAT2KIND[k] || null) : null;
+}
+function setInstanceColor(mesh, hex){
+  finRev++;
+  const baseKey = matKeyOf(mesh); if(!baseKey) return;
+  let mm = mesh.material;
+  if(!(mm.userData && mm.userData.pinned)){
+    mm = mm.clone();
+    mm.userData = {baseKey: baseKey, pinned: true};
+    mesh.material = mm;
+  }
+  mm.color.copy(linOf(hex));
+  FIN.inst = FIN.inst || {};
+  FIN.inst[pidOf(mesh)] = hex;
+  syncURL();
+}
+
+/* ---- styles (need a rebuild) ---- */
+function setKindStyle(kind, name){
+  finRev++;
+  FIN.styles = FIN.styles || {};
+  FIN.styles[kind] = name;
+  if(kind === 'lamp') FIN.lampStyle = name;      // pendant() reads this at build
+  applyStyles();
+  syncURL();
+  buildOption(current);
+}
+function applyStyles(){
+  const s = (FIN.styles && FIN.styles.top) || 'quartz';
+  const t = TOP_STYLES[s] || TOP_STYLES.quartz;
+  const m = M.top;
+  if(!FIN.top) m.color.copy(linOf(t.color));     // an explicit colour pick wins
+  const cv = TEX[t.tex];
+  if(cv){
+    const tx = new THREE.CanvasTexture(cv);
+    tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
+    tx.encoding = THREE.sRGBEncoding;
+    tx.repeat.set(t.rep, t.rep);
+    m.map = tx;
+    if(m.bumpMap) m.bumpMap = tx;
+  }
+  if('roughness' in m) m.roughness = t.r;
+  if('clearcoat' in m) m.clearcoat = t.cc;
+  m.needsUpdate = true;
+  FIN.lampStyle = (FIN.styles && FIN.styles.lamp) || 'lantern';
+}
+
+/* re-apply the whole scheme; called after every buildOption() */
+function applyFinishes(){
+  for(const kind in FIN){
+    if(KINDS[kind] && KINDS[kind].mats) setKindColor(kind, FIN[kind], true);
+  }
+  if(FIN.inst && world){
+    world.traverse(o=>{
+      if(!o.isMesh || !o.material || Array.isArray(o.material)) return;
+      const hex = FIN.inst[pidOf(o)];
+      if(hex === undefined) return;
+      const baseKey = matKeyOf(o);
+      const mm = o.material.clone();
+      mm.userData = {baseKey: baseKey, pinned: true};
+      mm.color.copy(linOf(hex));
+      o.material = mm;
+    });
+  }
+  if(selKind) setHighlight(selKind, true);
+}
+function resetFinishes(){
+  finRev++;
+  for(const k in FIN) delete FIN[k];
+  if(DEFAULTS) for(const k in DEFAULTS) if(M[k] && M[k].color) M[k].color.copy(DEFAULTS[k]);
+  applyStyles();
+  syncURL();
+  buildOption(current);
+}
+
+/* ---- URL hash, so a scheme can be texted to someone ---- */
+let _urlLock = false;
+function syncURL(){
+  if(_urlLock) return;
+  const parts = [];
+  for(const k of KIND_LIST) if(FIN[k] !== undefined) parts.push(k+'-'+FIN[k].toString(16).padStart(6,'0'));
+  if(FIN.styles) for(const k in FIN.styles) parts.push('s.'+k+'-'+FIN.styles[k]);
+  if(FIN.inst) for(const id in FIN.inst) parts.push('i.'+encodeURIComponent(id)+'-'+FIN.inst[id].toString(16).padStart(6,'0'));
+  const h = parts.length ? '#f='+parts.join('~') : '';
+  try{ history.replaceState(null,'',location.pathname+location.search+h); }catch(e){}
+}
+function readURL(){
+  const m = /[#&]f=([^&]+)/.exec(location.hash); if(!m) { applyStyles(); return; }
+  _urlLock = true;
+  for(const tok of decodeURIComponent(m[1]).split('~')){
+    const i = tok.lastIndexOf('-'); if(i < 0) continue;
+    const key = tok.slice(0,i), val = tok.slice(i+1);
+    if(key.startsWith('s.')){ FIN.styles = FIN.styles||{}; FIN.styles[key.slice(2)] = val; }
+    else if(key.startsWith('i.')){ FIN.inst = FIN.inst||{}; FIN.inst[decodeURIComponent(key.slice(2))] = parseInt(val,16); }
+    else if(KINDS[key]) FIN[key] = parseInt(val,16);
+  }
+  _urlLock = false;
+  applyStyles();
+}
+
+/* ---- selection + highlight ---- */
+let selKind = null, selMesh = null, pickMode = false, wallScope = 'all';
+const _fray = new THREE.Raycaster();
+const HL = new THREE.Color(0x3a2a08);
+
+function setHighlight(kind, on){
+  const K = KINDS[kind]; if(!K || !K.mats) return;
+  const c = on ? HL : null;
+  for(const k of K.mats){ const m=M[k]; if(m && m.emissive) m.emissive.copy(c||new THREE.Color(0));
+    if(m) m.needsUpdate = true; }
+  eachClone(K.mats, mm=>{ if(mm.emissive) mm.emissive.copy(c||new THREE.Color(0)); });
+}
+function clearHighlight(){
+  for(const kind of KIND_LIST) setHighlight(kind, false);
+}
+function selectKind(kind, mesh){
+  if(selKind && selKind !== kind) setHighlight(selKind, false);
+  selKind = kind; selMesh = mesh || null;
+  if(kind) setHighlight(kind, true);
+  onSelectionChanged();
+}
+/* First hit that has an adjustable finish. `_fray` must already be aimed.
+   Raycasting happens outside the render loop (event handlers, XR frames), and
+   three only refreshes world matrices during render — without the forced
+   update every object tests at the origin and picking returns nonsense. */
+function pickHits(){
+  if(!world) return null;
+  world.updateMatrixWorld(true);
+  _fray.far = 60;
+  const hits = _fray.intersectObject(world, true);
+  for(const h of hits){
+    if(!h.object.isMesh) continue;
+    const k = kindOfMesh(h.object);
+    if(k) return {mesh:h.object, kind:k, point:h.point};
+  }
+  return null;
+}
+/* ray -> {mesh, kind}; skips anything with no adjustable finish */
+function pickRay(origin, dir){
+  if(!world) return null;
+  _fray.set(origin, dir);
+  return pickHits();
+}
+/* apply the current swatch choice, honouring the wall "this one / all" scope */
+function applyPick(hex){
+  if(!selKind) return;
+  if(KINDS[selKind].perInstance && wallScope === 'one' && selMesh) setInstanceColor(selMesh, hex);
+  else setKindColor(selKind, hex);
+  onSelectionChanged();
+}
+function swatchesFor(kind){
+  const K = KINDS[kind]; if(!K) return [];
+  const out = [];
+  for(const r of (K.rows||['neutral'])) for(const c of SW[r]) out.push(c);
+  return out;
+}
+
+/* ---- desktop UI for the finish editor ---- */
+function setPickMode(v){
+  pickMode = v;
+  const el = document.getElementById('fin');
+  if(el) el.style.display = v ? 'block' : 'none';
+  const b = document.getElementById('btnFinish');
+  if(b) b.classList.toggle('on', v);
+  if(!v){ clearHighlight(); selKind = null; selMesh = null; }
+  onSelectionChanged();
+}
+/* redraws both surfaces: the DOM panel and, by bumping its key, the VR one */
+function onSelectionChanged(){
+  panelKey = '';
+  const el = id => document.getElementById(id);
+  const kindEl = el('finKind'); if(!kindEl) return;
+  const K = selKind ? KINDS[selKind] : null;
+  kindEl.textContent = K ? K.label : '';
+  el('finHint').style.display = K ? 'none' : 'block';
+  el('finScope').style.display = (K && K.perInstance) ? 'flex' : 'none';
+  el('finRow').style.display = K ? 'flex' : 'none';
+
+  const stEl = el('finStyles');
+  stEl.innerHTML = '';
+  stEl.style.display = (K && K.styles) ? 'flex' : 'none';
+  if(K && K.styles){
+    const names = Object.keys(K.styles);
+    const cur = (FIN.styles && FIN.styles[selKind]) || names[0];
+    for(const s of names){
+      const b = document.createElement('button');
+      b.textContent = K.styles[s].label;
+      if(s === cur) b.className = 'on';
+      b.onclick = () => setKindStyle(selKind, s);
+      stEl.appendChild(b);
+    }
+  }
+  const swEl = el('finSw');
+  swEl.innerHTML = '';
+  if(K) for(const c of swatchesFor(selKind)){
+    const b = document.createElement('button');
+    b.style.background = '#' + c.toString(16).padStart(6,'0');
+    b.title = b.style.background;
+    b.onclick = () => applyPick(c);
+    swEl.appendChild(b);
+  }
+  el('finAll').classList.toggle('on', wallScope === 'all');
+  el('finOne').classList.toggle('on', wallScope === 'one');
+}
+
+function finDesktopEvents(){
+  const cv = renderer.domElement;
+  let downX=0, downY=0, moved=0;
+  cv.addEventListener('mousedown', e=>{ downX=e.clientX; downY=e.clientY; moved=0; });
+  cv.addEventListener('mousemove', e=>{
+    moved = Math.max(moved, Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY));
+  });
+  cv.addEventListener('click', e=>{
+    if(!pickMode || overhead || planMode || xrOn) return;
+    if(moved > 5) return;                       // that was a drag-look, not a pick
+    const r = cv.getBoundingClientRect();
+    _fray.setFromCamera({x:((e.clientX-r.left)/r.width)*2-1,
+                         y:-((e.clientY-r.top)/r.height)*2+1}, camera);
+    const found = pickHits();
+    if(found){ selectKind(found.kind, found.mesh); return; }
+    toast('Nothing adjustable there — try a cabinet, wall or worktop.', 2600);
+  });
+
+  const on = (id, fn) => { const b = document.getElementById(id); if(b) b.onclick = fn; };
+  on('btnFinish', ()=>setPickMode(!pickMode));
+  on('finAll',    ()=>{ wallScope='all'; onSelectionChanged(); });
+  on('finOne',    ()=>{ wallScope='one'; onSelectionChanged(); });
+  on('finReset',  ()=>{ resetFinishes(); selectKind(null); });
+  on('finCopy',   ()=>{
+    const url = location.href;
+    const ok = ()=>toast('Link copied — it carries every finish choice.', 3500);
+    if(navigator.clipboard && window.isSecureContext)
+      navigator.clipboard.writeText(url).then(ok, ()=>toast(url, 8000));
+    else toast(url, 8000);
+  });
+  const pick = document.getElementById('finPick');
+  if(pick) pick.oninput = e => applyPick(parseInt(e.target.value.slice(1),16));
+}
+
+/* ============================================================
    §XR — Quest / WebXR immersive mode
    ------------------------------------------------------------
    The headset owns `camera` while a session runs, so the player is moved by
@@ -1612,7 +2046,11 @@ function setupXR(){
       if(aimCtrl === c) cancelAim();
     });
     // a controller trigger and a hand pinch both raise select
-    c.addEventListener('selectstart', ()=>{ if(!nearPanel(c)) aimCtrl = c; });
+    c.addEventListener('selectstart', ()=>{
+      if(nearPanel(c)) return;                    // the menu handles its own presses
+      if(pickMode){ const h=vrPickFrom(c); if(h) selectKind(h.kind, h.mesh); return; }
+      aimCtrl = c;
+    });
     c.addEventListener('selectend',   ()=>{ if(aimCtrl === c) commitTeleport(); });
     rig.add(c);
     xrCtrls.push(c);
@@ -1775,84 +2213,179 @@ function commitTeleport(){
   cancelAim();
 }
 
-/* ---- wrist panel: status plus three poke buttons, including EXIT VR ----
+/* ---- wrist panel: status, controls, and the in-VR finish editor ----
    Pressed by pushing the other hand's index fingertip (or a controller) into
    it, so it needs no button knowledge at all. Billboards to the head so it is
-   always readable, and draws on top so hands can't hide it. */
+   always readable, and draws on top so hands can't hide it.
+
+   Two pages. 'main' is the demo controls; 'edit' is the finish picker, which
+   also flips `pickMode` so a pinch out in the room selects a surface instead
+   of teleporting. Hit regions come from the same item list that was last
+   drawn, so what you poke is always what you see. */
 let panel=null, panelTex=null, panelKey='', panelHot=-1, pokeArmed=true, anchorC=null;
-const PANEL_W=0.24, PANEL_H=0.15, PC_W=320, PC_H=200;
-const PANEL_BTNS = [
-  {label:'A / B',   sub:'swap option', act:()=>switchOpt(current==='A'?'B':'A')},
-  {label:'PLAN',    sub:'sheet floor', act:()=>setPdfFloor(!pdfFloor)},
-  {label:'EXIT VR', sub:'end session', act:()=>{ const s=renderer.xr.getSession(); if(s) s.end(); }}
-];
-function btnRect(i){ const w=(PC_W-16-2*8)/3; return {x:8+i*(w+8), y:126, w:w, h:62}; }
+let panelPage='main', panelCache=[];
+const PANEL_W=0.30, PANEL_H=0.20, PC_W=420, PC_H=280;
+
+function panelItems(){
+  const items=[];
+  const BW=(PC_W-16-3*8)/4, BY=PC_H-58, BH=50;
+  const bar=(i,label,sub,act,hot)=>items.push({x:8+i*(BW+8),y:BY,w:BW,h:BH,label,sub,act,hot});
+  const endVR=()=>{ const s=renderer.xr.getSession(); if(s) s.end(); };
+  if(panelPage==='main'){
+    bar(0,'A / B','swap option', ()=>switchOpt(current==='A'?'B':'A'));
+    bar(1,'PLAN','sheet floor',  ()=>setPdfFloor(!pdfFloor), pdfFloor);
+    bar(2,'FINISH','recolour',   ()=>{ panelPage='edit'; pickMode=true; }, false);
+    bar(3,'EXIT VR','end session', endVR);
+    return items;
+  }
+  const K = selKind ? KINDS[selKind] : null;
+  if(K && K.styles){
+    const names=Object.keys(K.styles), w=(PC_W-16-(names.length-1)*6)/names.length;
+    const cur=(FIN.styles&&FIN.styles[selKind])||names[0];
+    names.forEach((s,i)=>items.push({x:8+i*(w+6), y:72, w:w, h:30, small:true,
+      label:K.styles[s].label, hot:cur===s, act:()=>setKindStyle(selKind,s)}));
+  }
+  if(K && K.perInstance){
+    const w=(PC_W-16-6)/2;
+    items.push({x:8,       y:108, w:w, h:28, small:true, label:'ALL WALLS',
+      hot:wallScope==='all', act:()=>{ wallScope='all'; }});
+    items.push({x:8+w+6,   y:108, w:w, h:28, small:true, label:'THIS WALL',
+      hot:wallScope==='one', act:()=>{ wallScope='one'; }});
+  }
+  if(K){
+    const sw=swatchesFor(selKind), COLS=8, cw=(PC_W-16-(COLS-1)*4)/COLS, ch=22;
+    sw.slice(0,COLS*3).forEach((c,i)=>{
+      const r=Math.floor(i/COLS), q=i%COLS;
+      items.push({x:8+q*(cw+4), y:144+r*(ch+4), w:cw, h:ch, swatch:c, act:()=>applyPick(c)});
+    });
+  }
+  bar(0,'BACK','done', ()=>{ panelPage='main'; pickMode=false; clearHighlight();
+                             selKind=null; selMesh=null; cancelAim(); });
+  bar(1,'RESET','defaults', ()=>resetFinishes());
+  bar(2,'A / B','swap option', ()=>switchOpt(current==='A'?'B':'A'));
+  bar(3,'EXIT VR','end session', endVR);
+  return items;
+}
 
 function ensurePanel(){
   if(panel) return panel;
-  const cv = document.createElement('canvas'); cv.width=PC_W; cv.height=PC_H;
-  panelTex = new THREE.CanvasTexture(cv);
-  panelTex.encoding = THREE.sRGBEncoding;
-  panel = new THREE.Mesh(new THREE.PlaneGeometry(PANEL_W,PANEL_H),
+  const cv=document.createElement('canvas'); cv.width=PC_W; cv.height=PC_H;
+  panelTex=new THREE.CanvasTexture(cv);
+  panelTex.encoding=THREE.sRGBEncoding;
+  panel=new THREE.Mesh(new THREE.PlaneGeometry(PANEL_W,PANEL_H),
     new THREE.MeshBasicMaterial({map:panelTex, transparent:true, depthTest:false}));
-  panel.renderOrder = 999;
-  panel.visible = false;
+  panel.renderOrder=999;
+  panel.visible=false;
   rig.add(panel);
   drawPanel();
   return panel;
 }
 function drawPanel(){
   if(!panelTex) return;
-  const key = current+finish+pdfFloor+panelHot;
-  if(key === panelKey) return;            // a canvas upload every frame is not free
-  panelKey = key;
-  const g = panelTex.image.getContext('2d');
+  const key=[panelPage,current,finish,pdfFloor,selKind,wallScope,panelHot,finRev].join('|');
+  if(key===panelKey) return;            // a canvas upload every frame is not free
+  panelKey=key;
+  panelCache=panelItems();
+  const g=panelTex.image.getContext('2d');
   g.clearRect(0,0,PC_W,PC_H);
-  g.fillStyle='rgba(20,19,17,.92)'; g.fillRect(0,0,PC_W,PC_H);
+  g.fillStyle='rgba(20,19,17,.93)'; g.fillRect(0,0,PC_W,PC_H);
   g.strokeStyle='#c8a24a'; g.lineWidth=3; g.strokeRect(1.5,1.5,PC_W-3,PC_H-3);
-  g.fillStyle='#c8a24a'; g.font='bold 34px system-ui, sans-serif';
-  g.fillText('OPTION '+current, 14, 44);
-  g.fillStyle='rgba(245,242,236,.62)'; g.font='19px system-ui, sans-serif';
-  g.fillText((finish==='oak'?'oak':'navy')+' island', 14, 70);
-  g.fillStyle='rgba(245,242,236,.5)'; g.font='15px system-ui, sans-serif';
-  g.fillText('pinch / trigger to aim, release to go', 14, 100);
-  PANEL_BTNS.forEach((b,i)=>{
-    const r = btnRect(i), hot = (panelHot===i);
-    g.fillStyle = hot ? '#c8a24a' : 'rgba(245,242,236,.09)';
-    g.fillRect(r.x,r.y,r.w,r.h);
-    g.strokeStyle = hot ? '#c8a24a' : 'rgba(200,162,74,.55)';
-    g.lineWidth=2; g.strokeRect(r.x,r.y,r.w,r.h);
+
+  if(panelPage==='main'){
+    g.fillStyle='#c8a24a'; g.font='bold 38px system-ui, sans-serif';
+    g.fillText('OPTION '+current, 14, 46);
+    g.fillStyle='rgba(245,242,236,.62)'; g.font='20px system-ui, sans-serif';
+    g.fillText((finish==='oak'?'oak':'navy')+' island', 14, 76);
+    g.fillStyle='rgba(245,242,236,.5)'; g.font='17px system-ui, sans-serif';
+    g.fillText('pinch / trigger to aim, release to go', 14, 112);
+    g.fillText('FINISH lets you recolour what you point at', 14, 138);
+  } else {
+    g.fillStyle='#c8a24a'; g.font='bold 26px system-ui, sans-serif';
+    g.fillText(selKind ? KINDS[selKind].label : 'Point and pinch', 14, 38);
+    g.fillStyle='rgba(245,242,236,.55)'; g.font='16px system-ui, sans-serif';
+    g.fillText(selKind ? 'every one of them changes together'
+                       : 'aim at a surface in the room, then pinch', 14, 60);
+  }
+
+  for(const it of panelCache){
+    const hot = (panelHot>=0 && panelCache[panelHot]===it);
+    if(it.swatch !== undefined){
+      g.fillStyle='#'+it.swatch.toString(16).padStart(6,'0');
+      g.fillRect(it.x,it.y,it.w,it.h);
+      g.strokeStyle = hot ? '#ffffff' : 'rgba(0,0,0,.45)';
+      g.lineWidth = hot ? 3 : 1;
+      g.strokeRect(it.x,it.y,it.w,it.h);
+      continue;
+    }
+    const on = hot || it.hot;
+    g.fillStyle = on ? '#c8a24a' : 'rgba(245,242,236,.09)';
+    g.fillRect(it.x,it.y,it.w,it.h);
+    g.strokeStyle = on ? '#c8a24a' : 'rgba(200,162,74,.55)';
+    g.lineWidth=2; g.strokeRect(it.x,it.y,it.w,it.h);
     g.textAlign='center';
-    g.fillStyle = hot ? '#1c1a17' : '#c8a24a';
-    g.font='bold 19px system-ui, sans-serif';
-    g.fillText(b.label, r.x+r.w/2, r.y+28);
-    g.fillStyle = hot ? 'rgba(28,26,23,.75)' : 'rgba(245,242,236,.55)';
-    g.font='13px system-ui, sans-serif';
-    g.fillText(b.sub, r.x+r.w/2, r.y+48);
+    g.fillStyle = on ? '#1c1a17' : '#c8a24a';
+    if(it.small){
+      g.font='bold 15px system-ui, sans-serif';
+      g.fillText(it.label, it.x+it.w/2, it.y+it.h/2+5);
+    } else {
+      g.font='bold 20px system-ui, sans-serif';
+      g.fillText(it.label, it.x+it.w/2, it.y+26);
+      g.fillStyle = on ? 'rgba(28,26,23,.75)' : 'rgba(245,242,236,.55)';
+      g.font='13px system-ui, sans-serif';
+      g.fillText(it.sub||'', it.x+it.w/2, it.y+44);
+    }
     g.textAlign='left';
-  });
-  panelTex.needsUpdate = true;
+  }
+  panelTex.needsUpdate=true;
 }
-/* which button is rig-local point `p` touching? -1 on the panel but no button,
+/* which item is rig-local point `p` touching? -1 on the panel but on no item,
    null if not on the panel at all */
 function panelPick(p){
   if(!panel || !panel.visible) return null;
   _m.copy(panel.matrix).invert();
   _s.copy(p).applyMatrix4(_m);
   if(Math.abs(_s.z) > 0.035) return null;
-  const u = (_s.x/PANEL_W + 0.5)*PC_W, v = (0.5 - _s.y/PANEL_H)*PC_H;
+  const u=(_s.x/PANEL_W+0.5)*PC_W, v=(0.5-_s.y/PANEL_H)*PC_H;
   if(u<0||u>PC_W||v<0||v>PC_H) return null;
-  for(let i=0;i<PANEL_BTNS.length;i++){
-    const r = btnRect(i);
+  for(let i=0;i<panelCache.length;i++){
+    const r=panelCache[i];
     if(u>=r.x && u<=r.x+r.w && v>=r.y && v<=r.y+r.h) return i;
   }
   return -1;
 }
-/* suppress a teleport when the select was really someone using the menu.
+/* suppress a teleport/pick when the select was really someone using the menu.
    Controller objects are children of rig, so .position is already rig-local. */
 function nearPanel(c){
   if(!panel || !panel.visible) return false;
   return panelPick(c.position) !== null;
+}
+/* ray out of a controller or hand, in world space */
+function vrPickFrom(c){
+  c.getWorldPosition(_v); c.getWorldQuaternion(_q);
+  return pickRay(_v.clone(), _v2.set(0,0,-1).applyQuaternion(_q).normalize().clone());
+}
+/* straight pointer while the finish editor is open */
+function updatePickRay(c){
+  ensureArc();
+  c.getWorldPosition(_v); c.getWorldQuaternion(_q);
+  const d=_v2.set(0,0,-1).applyQuaternion(_q).normalize();
+  const hit=pickRay(_v.clone(), d.clone());
+  const end = hit ? hit.point : _v.clone().add(d.clone().multiplyScalar(6));
+  const arr=arcLine.geometry.attributes.position.array;
+  for(let i=0;i<ARC_N;i++){
+    const t=i/(ARC_N-1);
+    arr[i*3]  =_v.x+(end.x-_v.x)*t;
+    arr[i*3+1]=_v.y+(end.y-_v.y)*t;
+    arr[i*3+2]=_v.z+(end.z-_v.z)*t;
+  }
+  arcLine.geometry.attributes.position.needsUpdate=true;
+  arcLine.visible=true;
+  arcLine.material.color.setHex(hit?0xc8a24a:0x6d6a63);
+  if(hit){
+    arcRing.position.copy(hit.point);
+    arcRing.visible=true;
+    arcRing.material.color.setHex(0xc8a24a);
+  } else arcRing.visible=false;
 }
 
 /* put the head exactly at (x,z) metres, facing `ya` */
@@ -1965,7 +2498,11 @@ function xrFrame(dt, frame){
   panelHot = hotNow;
   drawPanel();
 
-  if(aimCtrl) updateAim();
+  if(pickMode){
+    const live = xrCtrls.filter(c=>c.userData.src);
+    const rc = live.filter(c=>c.userData.hand==='right')[0] || live[0];
+    if(rc) updatePickRay(rc); else cancelAim();
+  } else if(aimCtrl) updateAim();
 
   /* ---- smooth locomotion (controller sticks; hands teleport instead) ---- */
   const mag = Math.min(Math.hypot(mx,mz), 1);

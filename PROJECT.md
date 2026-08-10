@@ -199,7 +199,39 @@ Three independent checks; between them they caught every major bug.
   under-cabinet lighting, toe kicks.
 - **Decision support**: side-by-side A/B split screen, cost/impact notes overlay.
 
-## 9. VR / WebXR (§XR in the HTML)
+## 9. Finish editor (§FIN in the HTML)
+
+Point at a surface, recolour every one of them. Works on desktop (click + HTML
+panel) and in VR (pinch + wrist-panel swatches); both drive the same engine.
+
+- **Why it's cheap**: every mesh already draws from the shared `M` palette, so
+  "all cabinets" is just `M.cab.color`. 17 kinds in `KINDS`, each mapping to one
+  or more palette keys; `MAT2KIND` inverts it for hit-testing.
+- **The one real trap**: `matFit()`/`steelFace()` hand out a per-mesh *clone*
+  whenever a surface needs world-scale texture repeat. Change only the base and
+  roughly a third of the kitchen silently ignores you — countertops especially,
+  since every slab strip is its own clone. Clones now carry
+  `userData.baseKey`, and `eachClone()` sweeps them. Measured: 29 tagged clones;
+  the 4 untrackable materials are the inline cooktop burner rings.
+- **Colours apply live; styles rebuild.** Countertop style swaps the map,
+  roughness and clearcoat, and pendant style swaps geometry, so both go through
+  `buildOption()` — the same rebuild the A/B toggle already uses.
+- **`applyFinishes()` runs at the end of every `buildOption()`**, which is what
+  makes a scheme survive an A/B or oak/navy toggle.
+- **Per-instance override** (walls): clone-on-write with `userData.pinned` so
+  global changes skip it, keyed by `pidOf()` — a rebuild-stable id built from the
+  mesh's local position and geometry params. Verified to survive A→B→A.
+- **L14 — raycasting outside the render loop needs a forced matrix update.**
+  three only refreshes world matrices inside `render()`. Picking from an event
+  handler or an XR frame tested every object at the origin, so rays reported
+  whatever plane happened to sit near the ray at z=0 — the only visible symptom
+  was "wrong thing selected". `pickHits()` calls `world.updateMatrixWorld(true)`.
+- **Schemes live in the URL hash** (`#f=cab-3b5c46~s.top-soap~i.<pid>-c0392b`),
+  so a scheme picked at the laptop opens in the headset from the same link.
+- Deliberately **not** adjustable, per the brief: floors, ceiling, and uppers vs
+  bases as separate kinds.
+
+## 10. VR / WebXR (§XR in the HTML)
 
 Delivery: **https://jmartz.github.io/kitchen-viewer/** opened in the Quest Browser.
 `QUEST.md` is the user-facing guide (controls + headset setup checklist).
@@ -265,7 +297,7 @@ Delivery: **https://jmartz.github.io/kitchen-viewer/** opened in the Quest Brows
   simply never appears and there is no error to see. The page now detects
   `!window.isSecureContext` and says so out loud rather than failing silently.
 
-## 10. Session Continuity
+## 11. Session Continuity
 
 Claude's memory for this project lives under `/areas/kitchen-viewer.md` (project
 history, corrections, and the L2/L3-class lessons are recorded there), so a new
