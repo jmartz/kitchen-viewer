@@ -1,0 +1,12 @@
+# local Claude Code state (machine-specific)
+.claude/settings.local.json
+
+# editor / OS cruft
+.DS_Store
+Thumbs.db
+*.swp
+
+# scratch renders from the verification tooling
+tools/out/
+footprints.json
+*.png.tmp
