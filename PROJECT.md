@@ -77,7 +77,8 @@ Start-viewer.bat, README.txt, PROJECT.md
   toggles rebuild `world` in place (camera stays put — the key comparison trick).
 - **2D plan view**: reads live `world.children` geometry every frame (never a
   cached image), draws over the embedded sheet crops. Mapping: the b64 crops cover
-  ft x −24..38, z −6..46 (from raster px (713,1601)-(3813,4201) at 50 px/ft).
+  ft x −24.38..37.62, z −5.96..46.04 (raster px (713,1601)-(3813,4201) at
+  50 px/ft, corrected origin). See the `PLAN_X0..PLAN_Z1` constants.
 - **Raster registration**: sheet scans are 200 dpi of 1/4"=1'-0" → **50 px/ft**;
   model origin sits at raster pixel **(OX,OY) = (1913, 1901)**.
 - **PBR**: materials authored as Lambert/Phong for simplicity, then `convertPBR()`
@@ -96,8 +97,9 @@ Start-viewer.bat, README.txt, PROJECT.md
 - Island (A): body 7.6 × 2.1 under an 8.0 × 3.17 top, 12" seating overhang south.
 - Nook (A): table capsule x 17.78–19.78, z 1.5–9.8; east bench face at x=19.96;
   south L-return block x 15.64–17.96, z 9.96–11.42; pendants z 3.66/5.70/7.74.
-- Kitchen/dining wall: body x 21.08–21.46 (z 0–11.75); **family east wall jogs**
-  to x 21.46–21.88 from z 15.83 south; open passage z 11.75–15.83 (~4'-1").
+- Kitchen/dining wall: body x 21.08–21.53 (z 0–11.76); the **family east wall is
+  flush** with it at x 21.08–21.53 from z 15.58 south (the old 5" jog was a
+  registration artifact); open passage z 11.76–15.58 (~3'-10").
 - Family room x 6.1–21.08, z 12.17–35.09; fireplace footprint x 4.66–6.62
   (proud toward deck), z 20.67–27.27; north French doors z 15.02–20.42; south
   door+sidelites z 27.77–34.17. Deck x −14.9–6.1, stairs at NW.
@@ -143,7 +145,7 @@ Three independent checks; between them they caught every major bug.
   gray poché = existing wall, jamb ticks bracket openings, ⊗ per legend = pendant.
   The legend is authoritative; check it before interpreting symbols.
 - **L6 — Dimensions measure interior faces.** Walls sit *beside* dim lines, not
-  centered on them; adjacent rooms can jog (21.46 vs 21.08). Model walls
+  centered on them; adjacent rooms can jog. Model walls
   accordingly or every neighboring room accumulates offset.
 - **L7 — Color management bites once per project.** sRGB output + sRGB-authored
   material colors = double gamma washout. Convert colors to linear, tag texture
