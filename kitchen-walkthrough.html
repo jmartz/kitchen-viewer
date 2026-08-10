@@ -927,7 +927,8 @@ function buildShared(opt){
 
   // ceiling over kitchen zone + dining
   const ce = new THREE.Mesh(new THREE.PlaneGeometry(F(ZONE_W+DIN_W),F(ZONE_D)), M.ceil);
-  ce.rotation.x=Math.PI/2; place(ce,(ZONE_W+DIN_W)/2,CEIL,ZONE_D/2);
+  ce.rotation.x=Math.PI/2; ce.castShadow=true;
+  place(ce,(ZONE_W+DIN_W)/2,CEIL,ZONE_D/2);
   // family room: vaulted whitewashed-plank ceiling, ridge N-S at room
   // center (~13'-6"), eaves at 10', dark faux beams following the slopes
   const RX=FAM_XWI+FAM_WV/2, RH=13.5, EH=10;
@@ -936,7 +937,8 @@ function buildShared(opt){
     const g=new THREE.PlaneGeometry(F(slant+0.35),F(FAM_D));
     g.rotateX(Math.PI/2); g.rotateZ(s*th);
     const pl=new THREE.Mesh(g,M.plank);
-    place(pl, RX-s*FAM_WV/4, (RH+EH)/2, ZONE_D+FAM_D/2);
+    pl.castShadow=pl.receiveShadow=true;   // the roof has to block the sun, or
+    place(pl, RX-s*FAM_WV/4, (RH+EH)/2, ZONE_D+FAM_D/2);  // only the beams do
   }
   // gables run wall-face to wall-face so the slopes have something to die into
   const GW=FAM_XE-FAM_XW, GX=(FAM_XW+FAM_XE)/2;
@@ -1050,7 +1052,8 @@ function buildShared(opt){
   wallSeg(ZONE_W+DIN_W+WALL_T,0, PASS_Z1, false, [{o:3,w:5,sill:3,head:7}]); // east outer
   wallSeg(ZONE_W,PASS_Z1, DIN_W+0.75, true, []);                // bath/pantry block wall
   const cd = new THREE.Mesh(new THREE.PlaneGeometry(F(DIN_W),F(PASS_Z1-ZONE_D)), M.ceil);
-  cd.rotation.x=Math.PI/2; place(cd,ZONE_W+DIN_W/2,CEIL,(PASS_Z1+ZONE_D)/2);
+  cd.rotation.x=Math.PI/2; cd.castShadow=true;
+  place(cd,ZONE_W+DIN_W/2,CEIL,(PASS_Z1+ZONE_D)/2);
   diningSet(ZONE_W+DIN_W/2, 6.8);
 
   // recessed ceiling lights, kitchen zone grid
@@ -1249,15 +1252,22 @@ function init(){
   const hemi = new THREE.HemisphereLight(0xdfeaf4, 0xa89b87, 0.32);
   scene.add(hemi);
   const sun = sunLight = new THREE.DirectionalLight(0xfff0da, 2.3);
-  sun.position.set(F(-18),F(22),F(6));
+  // Same sun direction as before, but pulled back along it and re-aimed at the
+  // middle of the house. The old shadow camera was a +/-30ft box on the world
+  // origin, so everything past z=30 -- most of the family room -- fell outside
+  // it and stopped casting, which read as a hard straight-line cutoff.
+  sun.target.position.set(F(8.7),F(5),F(17.3));
+  scene.add(sun.target);
+  sun.position.set(F(-53.3),F(80.7),F(37.95));
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048,2048);
   sun.shadow.radius=5;
   sun.shadow.normalBias=0.025;
   sun.shadow.bias=-0.0002;
-  const s = F(30);
+  const s = F(34);                       // covers the deck through the dining room
   sun.shadow.camera.left=-s; sun.shadow.camera.right=s;
   sun.shadow.camera.top=s; sun.shadow.camera.bottom=-s;
+  sun.shadow.camera.near=F(60); sun.shadow.camera.far=F(145);
   scene.add(sun);
   const fill = new THREE.PointLight(0xffe9c8, 0.5, F(34), 2);
   fill.position.set(F(10),F(8),F(7)); scene.add(fill);
@@ -1463,11 +1473,11 @@ function collide(nx,nz){
 }
 
 const clock = new THREE.Clock();
-function animate(){
+function animate(time, frame){
   const dt = Math.min(clock.getDelta(),0.05);
 
   if(xrOn){
-    xrFrame(dt);
+    xrFrame(dt, frame);              // `frame` is how we reach hand joints + viewer pose
     renderer.render(scene,camera);   // camera pose comes from the headset
     return;
   }
@@ -1516,15 +1526,55 @@ function animate(){
    model floor, so the user's true standing height is their eye height in the
    kitchen — the whole point of taking this to VR.
 
-   Controls (Quest Touch):
-     left stick    glide, head-relative        trigger (either)  run
-     right stick   30 degree snap turn         A  swap Option A/B
-     X  recenter to spawn                      B  oak / navy island
-     Y  plan-floor overlay (sheet at 1:1 underfoot)
+   Head pose is read from the XRFrame's viewer pose, NOT from `camera`. three
+   only writes camera.position during render(), so anything reading it before
+   the first render() gets the stale desktop position — which is what used to
+   fling the spawn out onto the deck.
+
+   Works with hand tracking AND Touch controllers. Everything essential is
+   driven by `select` (controller trigger / hand pinch) plus a poke panel that
+   rides on the left wrist, so a guest who has never held a controller can run
+   the whole demo bare-handed.
+
+     select (trigger or pinch, either hand)  aim the arc, release to teleport
+     poke the wrist panel                    swap A/B · plan floor · EXIT VR
+     controllers also: left stick glide, right stick snap turn, grip runs,
+                       A swap, B finish, X recenter, Y exit
    ============================================================ */
-let rig=null, xrOn=false, xrCtrls=[], wristTex=null, needRecenter=false, foveated=false;
+let rig=null, xrOn=false, xrCtrls=[], needRecenter=false, foveated=false;
 const XR_TURN = Math.PI/6, XR_SPEED = 1.5, DEAD = 0.22;
-const _v = new THREE.Vector3(), _q = new THREE.Quaternion();
+const _v = new THREE.Vector3(), _q = new THREE.Quaternion(),
+      _v2 = new THREE.Vector3(), _q2 = new THREE.Quaternion(),
+      _m  = new THREE.Matrix4(),  _s  = new THREE.Vector3();
+
+/* Where VR drops you: family room, just north of the sectional, facing the
+   kitchen. The shell only builds wall stubs at x 0..3 and 6.0..6.6 along
+   z=ZONE_D, so from here the opening through to the island and the north run
+   is wide open. yaw 0 == facing north. */
+const XR_SPAWN = {x:13.5, z:19.5, yaw:0};
+
+/* ---- head pose, in rig-local (reference) space, straight from the frame ---- */
+const headPos = new THREE.Vector3(), headQuat = new THREE.Quaternion();
+let headOK = false;
+function readHead(frame){
+  const ref = renderer.xr.getReferenceSpace();
+  const vp  = (frame && ref) ? frame.getViewerPose(ref) : null;
+  if(!vp){ return (headOK = false); }
+  const p = vp.transform.position, o = vp.transform.orientation;
+  headPos.set(p.x, p.y, p.z);
+  headQuat.set(o.x, o.y, o.z, o.w);
+  return (headOK = true);
+}
+function headWorld(out){ return out.copy(headPos).applyMatrix4(rig.matrixWorld); }
+function headWorldQuat(out){ return out.copy(rig.quaternion).multiply(headQuat); }
+
+/* ---- hand joints ---- */
+const HAND_JOINTS = ['wrist','thumb-metacarpal','thumb-phalanx-proximal',
+  'thumb-phalanx-distal','thumb-tip'].concat(
+  ['index','middle','ring','pinky'].reduce((a,f)=>a.concat(
+    ['metacarpal','phalanx-proximal','phalanx-intermediate','phalanx-distal','tip']
+      .map(s=>f+'-finger-'+s)), []));
+const J_TIP = HAND_JOINTS.indexOf('index-finger-tip'), J_WRIST = 0;
 
 function setupXR(){
   renderer.xr.setReferenceSpaceType('local-floor');
@@ -1536,14 +1586,27 @@ function setupXR(){
     const c = renderer.xr.getController(i);
     c.userData.prev = {};
     c.addEventListener('connected', e=>{
-      c.userData.hand = e.data.handedness;
-      c.userData.gp   = e.data.gamepad || null;
-      c.add(controllerStub(c.userData.hand));
+      c.userData.hand   = e.data.handedness;
+      c.userData.src    = e.data;
+      c.userData.gp     = e.data.gamepad || null;
+      c.userData.isHand = !!e.data.hand;
+      // a tracked hand draws its own joints; a controller gets a small stub
+      if(!c.userData.isHand && !c.userData.stub){
+        const b = new THREE.Mesh(new THREE.BoxGeometry(0.035,0.03,0.09),
+          new THREE.MeshBasicMaterial({color:0x2a2c31}));
+        b.position.z = 0.02;
+        c.add(b); c.userData.stub = b;
+      }
     });
     c.addEventListener('disconnected', ()=>{
-      c.userData.gp = null;
-      while(c.children.length) c.remove(c.children[0]);
+      c.userData.gp = null; c.userData.src = null; c.userData.isHand = false;
+      if(c.userData.stub){ c.remove(c.userData.stub); c.userData.stub = null; }
+      if(c.userData.hmesh) c.userData.hmesh.visible = false;
+      if(aimCtrl === c) cancelAim();
     });
+    // a controller trigger and a hand pinch both raise select
+    c.addEventListener('selectstart', ()=>{ if(!nearPanel(c)) aimCtrl = c; });
+    c.addEventListener('selectend',   ()=>{ if(aimCtrl === c) commitTeleport(); });
     rig.add(c);
     xrCtrls.push(c);
   }
@@ -1559,17 +1622,22 @@ function setupXR(){
       sunLight.shadow.mapSize.set(1024,1024);
       if(sunLight.shadow.map){ sunLight.shadow.map.dispose(); sunLight.shadow.map = null; }
     }
-    needRecenter = true; foveated = false;
+    needRecenter = true; foveated = false; headOK = false;
   });
 
   renderer.xr.addEventListener('sessionend', ()=>{
     xrOn = false;
     document.body.classList.remove('xr');
     document.getElementById('btnVR').textContent = 'Enter VR';
-    camera.getWorldPosition(_v); pos.x=_v.x; pos.z=_v.z; pos.y=F(5.6);
-    camera.getWorldQuaternion(_q);
-    _v.set(0,0,-1).applyQuaternion(_q);
-    yaw = Math.atan2(-_v.x, -_v.z); pitch = 0;
+    if(headOK){
+      headWorld(_v); pos.x=_v.x; pos.z=_v.z; pos.y=F(5.6);
+      headWorldQuat(_q);
+      _v.set(0,0,-1).applyQuaternion(_q);
+      yaw = Math.atan2(-_v.x, -_v.z); pitch = 0;
+    }
+    cancelAim();
+    if(panel) panel.visible = false;
+    xrCtrls.forEach(c=>{ if(c.userData.hmesh) c.userData.hmesh.visible = false; });
     rig.position.set(0,0,0); rig.rotation.set(0,0,0);
     if(sunLight){
       sunLight.shadow.mapSize.set(2048,2048);
@@ -1580,72 +1648,222 @@ function setupXR(){
   initVRButton();
 }
 
-/* a small controller marker plus, on the left hand, a wrist legend card */
-function controllerStub(hand){
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.035,0.03,0.09),
-    new THREE.MeshBasicMaterial({color:0x2a2c31}));
-  body.position.z = 0.02;
-  g.add(body);
-  if(hand === 'left'){
-    const c = document.createElement('canvas'); c.width=256; c.height=160;
-    wristTex = new THREE.CanvasTexture(c);
-    wristTex.encoding = THREE.sRGBEncoding;
-    const card = new THREE.Mesh(new THREE.PlaneGeometry(0.16,0.10),
-      new THREE.MeshBasicMaterial({map:wristTex, transparent:true}));
-    card.position.set(0, 0.045, 0.03);
-    card.rotation.x = -Math.PI/2.6;
-    g.add(card);
-    drawWrist();
-  }
-  return g;
+/* ---- hand rendering: one InstancedMesh of 25 joint spheres per hand ----
+   WebXR does not draw hands for you. Without this you are invisible to
+   yourself and nothing reads as touchable. */
+function handMesh(c){
+  if(c.userData.hmesh) return c.userData.hmesh;
+  const im = new THREE.InstancedMesh(
+    new THREE.SphereGeometry(1,8,6),
+    new THREE.MeshStandardMaterial({color:0xe6d5bb, roughness:0.9, metalness:0}),
+    HAND_JOINTS.length);
+  im.frustumCulled = false; im.castShadow = false; im.receiveShadow = false;
+  im.visible = false;
+  rig.add(im);
+  return (c.userData.hmesh = im);
 }
-let wristKey='';
-function drawWrist(){
-  if(!wristTex) return;
-  const key = current + finish;
-  if(key === wristKey) return;          // canvas upload every frame is not free
-  wristKey = key;
-  const c = wristTex.image, g = c.getContext('2d');
-  g.clearRect(0,0,256,160);
-  g.fillStyle = 'rgba(20,19,17,.9)';
-  g.fillRect(0,0,256,160);
-  g.strokeStyle = '#c8a24a'; g.lineWidth = 3; g.strokeRect(1.5,1.5,253,157);
-  g.fillStyle = '#c8a24a';
-  g.font = 'bold 30px system-ui, sans-serif';
-  g.fillText('OPTION ' + current, 14, 40);
-  g.font = '17px system-ui, sans-serif';
-  g.fillStyle = 'rgba(245,242,236,.62)';
-  g.fillText(finish === 'oak' ? 'oak island' : 'navy island', 14, 62);
-  g.fillStyle = 'rgba(245,242,236,.85)';
-  g.font = '16px system-ui, sans-serif';
-  const rows = [['A','swap A / B'], ['B','island finish'],
-                ['X','recenter'],   ['Y','plan floor']];
-  rows.forEach((r,i)=>{
-    const y = 88 + i*18;
-    g.fillStyle = '#c8a24a'; g.fillText(r[0], 14, y);
-    g.fillStyle = 'rgba(245,242,236,.8)'; g.fillText(r[1], 40, y);
-  });
-  wristTex.needsUpdate = true;
+/* returns rig-local {tip, wrist} for a tracked hand, else null */
+function updateHand(c, frame){
+  const src = c.userData.src, ref = renderer.xr.getReferenceSpace();
+  if(!src || !src.hand || !src.hand.get || !frame || !ref){
+    if(c.userData.hmesh) c.userData.hmesh.visible = false;
+    return null;
+  }
+  const im = handMesh(c);
+  let any=false, tip=null, wrist=null;
+  for(let i=0;i<HAND_JOINTS.length;i++){
+    const j  = src.hand.get(HAND_JOINTS[i]);
+    const jp = j ? frame.getJointPose(j, ref) : null;
+    if(!jp){ _m.makeScale(0,0,0); im.setMatrixAt(i,_m); continue; }
+    any = true;
+    const p = jp.transform.position, o = jp.transform.orientation;
+    _v2.set(p.x,p.y,p.z); _q2.set(o.x,o.y,o.z,o.w);
+    _m.compose(_v2, _q2, _s.setScalar(Math.max(jp.radius||0.008, 0.006)));
+    im.setMatrixAt(i,_m);
+    if(i===J_TIP)   tip   = _v2.clone();
+    if(i===J_WRIST) wrist = _v2.clone();
+  }
+  im.instanceMatrix.needsUpdate = true;
+  im.visible = any;
+  return any ? {tip, wrist} : null;
 }
 
-/* put the head exactly at (x,z) feet-space metres, facing `ya` */
+/* ---- teleport arc ---- */
+let arcLine=null, arcRing=null, aimCtrl=null, aimValid=false;
+const aimPt = new THREE.Vector3();
+const ARC_N=28, ARC_DT=0.055, ARC_V=7.0, ARC_G=9.8;
+function ensureArc(){
+  if(arcLine) return;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ARC_N*3),3));
+  arcLine = new THREE.Line(g, new THREE.LineBasicMaterial({color:0xc8a24a}));
+  arcLine.frustumCulled = false; arcLine.visible = false;
+  scene.add(arcLine);
+  const rg = new THREE.RingGeometry(0.14,0.24,28); rg.rotateX(-Math.PI/2);
+  arcRing = new THREE.Mesh(rg, new THREE.MeshBasicMaterial(
+    {color:0xc8a24a, transparent:true, opacity:0.85, side:THREE.DoubleSide}));
+  arcRing.visible = false;
+  scene.add(arcRing);
+}
+function cancelAim(){
+  aimCtrl = null; aimValid = false;
+  if(arcLine){ arcLine.visible = false; arcRing.visible = false; }
+}
+function updateAim(){
+  ensureArc();
+  aimCtrl.getWorldPosition(_v);
+  aimCtrl.getWorldQuaternion(_q);
+  const vx = _v2.set(0,0,-1).applyQuaternion(_q).multiplyScalar(ARC_V);
+  const arr = arcLine.geometry.attributes.position.array;
+  let hit=false, hx=0, hz=0, prevX=_v.x, prevY=_v.y, prevZ=_v.z;
+  arr[0]=prevX; arr[1]=prevY; arr[2]=prevZ;
+  for(let i=1;i<ARC_N;i++){
+    let x,y,z;
+    if(hit){ x=hx; y=0; z=hz; }
+    else{
+      const t = i*ARC_DT;
+      x = _v.x + vx.x*t;
+      y = _v.y + vx.y*t - 0.5*ARC_G*t*t;
+      z = _v.z + vx.z*t;
+      if(y <= 0){
+        const f = (prevY - y) !== 0 ? prevY/(prevY-y) : 0;
+        hx = prevX + (x-prevX)*f;
+        hz = prevZ + (z-prevZ)*f;
+        x=hx; y=0; z=hz; hit=true;
+      } else { prevX=x; prevY=y; prevZ=z; }
+    }
+    arr[i*3]=x; arr[i*3+1]=y; arr[i*3+2]=z;
+  }
+  arcLine.geometry.attributes.position.needsUpdate = true;
+  arcLine.visible = true;
+  if(hit){
+    // land where you'd actually be allowed to stand; only refuse when the
+    // correction is big enough that the marker would lie about the outcome
+    const c = collide(hx,hz);
+    aimValid = Math.hypot(c[0]-hx, c[1]-hz) < 1.0;
+    aimPt.set(c[0],0,c[1]);
+    arcRing.position.set(c[0],0.02,c[1]);
+    arcRing.visible = true;
+  } else {
+    aimValid = false; arcRing.visible = false;
+  }
+  const col = aimValid ? 0xc8a24a : 0xd0483a;
+  arcLine.material.color.setHex(col);
+  arcRing.material.color.setHex(col);
+}
+function commitTeleport(){
+  if(aimValid && headOK){
+    rig.updateMatrixWorld(true);
+    headWorld(_v);
+    rig.position.x += aimPt.x - _v.x;
+    rig.position.z += aimPt.z - _v.z;
+    rig.updateMatrixWorld(true);
+    pos.set(aimPt.x, F(5.6), aimPt.z);
+  }
+  cancelAim();
+}
+
+/* ---- wrist panel: status plus three poke buttons, including EXIT VR ----
+   Pressed by pushing the other hand's index fingertip (or a controller) into
+   it, so it needs no button knowledge at all. Billboards to the head so it is
+   always readable, and draws on top so hands can't hide it. */
+let panel=null, panelTex=null, panelKey='', panelHot=-1, pokeArmed=true, anchorC=null;
+const PANEL_W=0.24, PANEL_H=0.15, PC_W=320, PC_H=200;
+const PANEL_BTNS = [
+  {label:'A / B',   sub:'swap option', act:()=>switchOpt(current==='A'?'B':'A')},
+  {label:'PLAN',    sub:'sheet floor', act:()=>setPdfFloor(!pdfFloor)},
+  {label:'EXIT VR', sub:'end session', act:()=>{ const s=renderer.xr.getSession(); if(s) s.end(); }}
+];
+function btnRect(i){ const w=(PC_W-16-2*8)/3; return {x:8+i*(w+8), y:126, w:w, h:62}; }
+
+function ensurePanel(){
+  if(panel) return panel;
+  const cv = document.createElement('canvas'); cv.width=PC_W; cv.height=PC_H;
+  panelTex = new THREE.CanvasTexture(cv);
+  panelTex.encoding = THREE.sRGBEncoding;
+  panel = new THREE.Mesh(new THREE.PlaneGeometry(PANEL_W,PANEL_H),
+    new THREE.MeshBasicMaterial({map:panelTex, transparent:true, depthTest:false}));
+  panel.renderOrder = 999;
+  panel.visible = false;
+  rig.add(panel);
+  drawPanel();
+  return panel;
+}
+function drawPanel(){
+  if(!panelTex) return;
+  const key = current+finish+pdfFloor+panelHot;
+  if(key === panelKey) return;            // a canvas upload every frame is not free
+  panelKey = key;
+  const g = panelTex.image.getContext('2d');
+  g.clearRect(0,0,PC_W,PC_H);
+  g.fillStyle='rgba(20,19,17,.92)'; g.fillRect(0,0,PC_W,PC_H);
+  g.strokeStyle='#c8a24a'; g.lineWidth=3; g.strokeRect(1.5,1.5,PC_W-3,PC_H-3);
+  g.fillStyle='#c8a24a'; g.font='bold 34px system-ui, sans-serif';
+  g.fillText('OPTION '+current, 14, 44);
+  g.fillStyle='rgba(245,242,236,.62)'; g.font='19px system-ui, sans-serif';
+  g.fillText((finish==='oak'?'oak':'navy')+' island', 14, 70);
+  g.fillStyle='rgba(245,242,236,.5)'; g.font='15px system-ui, sans-serif';
+  g.fillText('pinch / trigger to aim, release to go', 14, 100);
+  PANEL_BTNS.forEach((b,i)=>{
+    const r = btnRect(i), hot = (panelHot===i);
+    g.fillStyle = hot ? '#c8a24a' : 'rgba(245,242,236,.09)';
+    g.fillRect(r.x,r.y,r.w,r.h);
+    g.strokeStyle = hot ? '#c8a24a' : 'rgba(200,162,74,.55)';
+    g.lineWidth=2; g.strokeRect(r.x,r.y,r.w,r.h);
+    g.textAlign='center';
+    g.fillStyle = hot ? '#1c1a17' : '#c8a24a';
+    g.font='bold 19px system-ui, sans-serif';
+    g.fillText(b.label, r.x+r.w/2, r.y+28);
+    g.fillStyle = hot ? 'rgba(28,26,23,.75)' : 'rgba(245,242,236,.55)';
+    g.font='13px system-ui, sans-serif';
+    g.fillText(b.sub, r.x+r.w/2, r.y+48);
+    g.textAlign='left';
+  });
+  panelTex.needsUpdate = true;
+}
+/* which button is rig-local point `p` touching? -1 on the panel but no button,
+   null if not on the panel at all */
+function panelPick(p){
+  if(!panel || !panel.visible) return null;
+  _m.copy(panel.matrix).invert();
+  _s.copy(p).applyMatrix4(_m);
+  if(Math.abs(_s.z) > 0.035) return null;
+  const u = (_s.x/PANEL_W + 0.5)*PC_W, v = (0.5 - _s.y/PANEL_H)*PC_H;
+  if(u<0||u>PC_W||v<0||v>PC_H) return null;
+  for(let i=0;i<PANEL_BTNS.length;i++){
+    const r = btnRect(i);
+    if(u>=r.x && u<=r.x+r.w && v>=r.y && v<=r.y+r.h) return i;
+  }
+  return -1;
+}
+/* suppress a teleport when the select was really someone using the menu.
+   Controller objects are children of rig, so .position is already rig-local. */
+function nearPanel(c){
+  if(!panel || !panel.visible) return false;
+  return panelPick(c.position) !== null;
+}
+
+/* put the head exactly at (x,z) metres, facing `ya` */
 function recenterTo(x, z, ya){
   rig.position.set(0,0,0);
   rig.rotation.set(0, ya||0, 0);
   rig.updateMatrixWorld(true);
-  camera.getWorldPosition(_v);
+  headWorld(_v);
   rig.position.set(x - _v.x, 0, z - _v.z);
+  rig.updateMatrixWorld(true);
+  pos.set(x, F(5.6), z);
 }
 /* snap turn about the head, not the rig origin, or the room swings around you */
 function snapTurn(a){
-  camera.getWorldPosition(_v);
+  rig.updateMatrixWorld(true);
+  headWorld(_v);
   const hx=_v.x, hz=_v.z;
   rig.rotation.y += a;
   rig.updateMatrixWorld(true);
-  camera.getWorldPosition(_v);
+  headWorld(_v);
   rig.position.x += hx - _v.x;
   rig.position.z += hz - _v.z;
+  rig.updateMatrixWorld(true);
 }
 
 /* Fixed foveated rendering. three r128 has no renderer.xr.setFoveation (added
@@ -1659,18 +1877,33 @@ function applyFoveation(level){
   return false;
 }
 
-function xrFrame(dt){
+function xrFrame(dt, frame){
   if(!foveated) foveated = applyFoveation(0.7);
+  if(!readHead(frame)) return;            // no pose yet: do nothing at all
+  rig.updateMatrixWorld(true);
+
   if(needRecenter){
-    const s = OPTS[current].spawn;
-    recenterTo(F(s.x), F(s.z), s.yaw);
+    recenterTo(F(XR_SPAWN.x), F(XR_SPAWN.z), XR_SPAWN.yaw);
     needRecenter = false;
     return;
   }
-  let mx=0, mz=0, run=1;
+
+  /* ---- read every input, hand or controller ---- */
+  let mx=0, mz=0, run=1, leftAnchor=null;
+  const pokeTips = [];
   const dz = v => Math.abs(v) < DEAD ? 0 : (v - Math.sign(v)*DEAD)/(1-DEAD);
+  anchorC = null;
 
   for(const c of xrCtrls){
+    const joints = updateHand(c, frame);
+    if(joints){
+      if(joints.tip) pokeTips.push({c, p:joints.tip});
+      if(c.userData.hand === 'left' && joints.wrist){ leftAnchor = joints.wrist; anchorC = c; }
+    } else if(c.userData.src){
+      pokeTips.push({c, p:c.position.clone()});
+      if(c.userData.hand === 'left'){ leftAnchor = c.position.clone(); anchorC = c; }
+    }
+
     const gp = c.userData.gp;
     if(!gp) continue;
     const ax = gp.axes || [];
@@ -1680,7 +1913,7 @@ function xrFrame(dt){
     const down = i => !!(b[i] && b[i].pressed);
     const hit  = i => { const d=down(i), was=c.userData.prev[i]; c.userData.prev[i]=d; return d && !was; };
 
-    if(down(0)) run = 2.0;                         // trigger to run
+    if(down(1)) run = 2.0;                       // grip runs; the trigger aims
 
     if(c.userData.hand === 'right'){
       if(Math.abs(sx) > 0.65){
@@ -1688,38 +1921,60 @@ function xrFrame(dt){
       } else if(Math.abs(sx) < 0.3) c.userData.turned = false;
       if(hit(4)) switchOpt(current === 'A' ? 'B' : 'A');
       if(hit(5)) setFinish(finish === 'oak' ? 'navy' : 'oak');
-      hit(0);
     } else {
       mx += sx; mz += sy;
       if(hit(4)) needRecenter = true;
-      if(hit(5)) setPdfFloor(!pdfFloor);
-      hit(0);
+      if(hit(5)){ const s = renderer.xr.getSession(); if(s){ s.end(); return; } }
     }
   }
-  drawWrist();
 
+  /* ---- park the panel on the left wrist, or lower-left of view if there is
+         no left hand to hang it on ---- */
+  ensurePanel();
+  panel.visible = true;
+  if(leftAnchor){
+    panel.position.copy(leftAnchor);
+    panel.position.y += 0.11;
+  } else {
+    panel.position.copy(_v2.set(-0.20,-0.22,-0.50).applyQuaternion(headQuat).add(headPos));
+  }
+  panel.lookAt(headWorld(_v));
+  panel.updateMatrix();
+
+  /* ---- poke: the hand the panel hangs off can't press its own buttons ---- */
+  let hotNow = -1;
+  for(const t of pokeTips){
+    if(anchorC && t.c === anchorC) continue;
+    const i = panelPick(t.p);
+    if(i !== null && i >= 0){ hotNow = i; break; }
+  }
+  if(hotNow >= 0 && pokeArmed){ PANEL_BTNS[hotNow].act(); pokeArmed = false; }
+  if(hotNow < 0) pokeArmed = true;
+  panelHot = hotNow;
+  drawPanel();
+
+  if(aimCtrl) updateAim();
+
+  /* ---- smooth locomotion (controller sticks; hands teleport instead) ---- */
   const mag = Math.min(Math.hypot(mx,mz), 1);
+  headWorld(_v);
+  let nx=_v.x, nz=_v.z;
   if(mag > 0){
-    camera.getWorldQuaternion(_q);
-    const d = new THREE.Vector3(mx, 0, mz).applyQuaternion(_q);
+    headWorldQuat(_q);
+    const d = _v2.set(mx,0,mz).applyQuaternion(_q);
     d.y = 0;
     if(d.lengthSq() > 1e-6){
       d.normalize();
-      camera.getWorldPosition(_v);
       const step = XR_SPEED * run * mag * dt;
-      let [nx,nz] = collide(_v.x + d.x*step, _v.z + d.z*step);
-      rig.position.x += nx - _v.x;
-      rig.position.z += nz - _v.z;
-      pos.set(nx, F(5.6), nz);
+      nx += d.x*step; nz += d.z*step;
     }
-  } else {
-    // physical walking still needs to be kept out of the cabinets
-    camera.getWorldPosition(_v);
-    const [nx,nz] = collide(_v.x, _v.z);
-    rig.position.x += nx - _v.x;
-    rig.position.z += nz - _v.z;
-    pos.set(nx, F(5.6), nz);
   }
+  // physical walking still needs to be kept out of the cabinets
+  const c2 = collide(nx,nz);
+  rig.position.x += c2[0] - _v.x;
+  rig.position.z += c2[1] - _v.z;
+  rig.updateMatrixWorld(true);
+  pos.set(c2[0], F(5.6), c2[1]);
 }
 
 async function initVRButton(){

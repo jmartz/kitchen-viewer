@@ -33,12 +33,18 @@ CONTROLS
   Option A/B, views (Walk / 3D top / 2D plan), island finish, plan-floor
   and X-ray overlays.
 
-IN VR (Meta Quest)
+IN VR (Meta Quest) - hands or controllers, either works
   Open https://jmartz.github.io/kitchen-viewer/ in the Quest Browser and tap
   the gold "Enter VR" button. NOT the localhost/LAN address - WebXR needs
   https, and the button won't appear on a plain http:// address.
-    left stick   move        right stick  30-degree snap turn
-    trigger      run         A  swap Option A/B      B  oak/navy island
-    X  recenter              Y  plan-floor overlay
-  A legend card rides on the left controller. See QUEST.md for the full
-  setup checklist (charging, updates, controller batteries, Guardian).
+  You start in the family room looking north into the kitchen.
+    PINCH (or squeeze the trigger)  aim the gold arc, let go to teleport
+    WRIST PANEL, left wrist         poke it with your right index finger:
+                                      A/B  swap option
+                                      PLAN  scanned sheet on the floor at 1:1
+                                      EXIT VR  end the session
+    Controllers also: left stick glides, right stick snap-turns 30 degrees,
+    grip runs, A swaps, B changes island finish, X recenters, Y exits.
+  You can also just walk - the play space is 1:1 and you can't walk through
+  the island. See QUEST.md for the full setup checklist (charging, updates,
+  turning hand tracking on, Guardian).

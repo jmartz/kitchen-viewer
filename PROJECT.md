@@ -213,14 +213,49 @@ Delivery: **https://jmartz.github.io/kitchen-viewer/** opened in the Quest Brows
   outright — nothing to calibrate.
 - **Loop**: `renderer.setAnimationLoop(animate)`. `requestAnimationFrame` never fires
   during an XR session; this was the one non-obvious porting requirement.
+- **Head pose comes from the XRFrame viewer pose, never from `camera`.** three only
+  writes `camera.position` inside `render()`, so anything reading it earlier in the
+  frame gets the stale *desktop* position. That is what threw the first spawn out onto
+  the deck: `recenterTo` subtracted an 11'×10'-8" "head offset" that was really the old
+  walk-mode camera. `readHead(frame)` + `headWorld()` are now the only sources of truth,
+  and `xrFrame` no-ops entirely until a pose exists.
+- **Spawn** `XR_SPAWN` = family room x 13.5, z 19.5, yaw 0 — north of the sectional,
+  looking through the kitchen opening. Separate from the per-option desktop spawns, and
+  verified against `collide()` (pushout 0.0000 m, so it is a legal standing spot).
 - **Locomotion** reuses `collide()` unchanged. Collision is evaluated on the *head's
   world position* and the correction is applied to the rig, so physically walking into
   the island is blocked too. `pos` is kept in sync so the minimap and 2D plan still work.
 - **Snap turn** pivots about the head, not the rig origin (measured: 0.0000 m drift),
   otherwise the room swings around you.
-- **Bindings**: left stick move, right stick snap 30°, trigger run, A = swap A/B,
-  B = island finish, X = recenter, Y = plan floor. A CanvasTexture legend card is
-  parented to the left controller and redraws only when `current+finish` changes.
+- **Hand tracking is the primary input**, not a bonus. A hand input source has **no
+  gamepad**, so a controller-only binding set is 100% dead in hands mode — which is how
+  the first version shipped. Everything essential now rides on `select` (trigger *and*
+  pinch both raise it) plus a poke panel.
+- **Hands must be drawn by us.** WebXR hands you joint poses and nothing else; the
+  runtime renders nothing. `updateHand()` reads all 25 joints via
+  `frame.getJointPose(hand.get(name), refSpace)` into one `InstancedMesh` per hand
+  (1 draw call, `jointPose.radius` as the sphere scale). Read the joints from the frame
+  rather than three's hand objects — the hand API moved around across r119–r131.
+- **Teleport**: parabolic arc from the target-ray space, first y=0 crossing, then the
+  landing point is run through `collide()` and the *corrected* point is what the ring
+  shows — so aiming at the island lands you beside it rather than refusing. Only
+  refuses (red) if the correction exceeds 1 m or the arc never reaches the floor.
+- **Wrist panel** (`PANEL_BTNS`): CanvasTexture on a plane parented to the rig, parked
+  above the left wrist and billboarded to the head, `depthTest:false` so hands can't
+  hide it. Buttons are canvas rects hit-tested against a fingertip transformed into
+  panel-local space. Two non-obvious guards: the hand the panel hangs off is excluded
+  from poking it (otherwise its own fingertip sits in a button permanently), and
+  `nearPanel()` suppresses the teleport when a select happens at the menu.
+- **Bindings**: pinch/trigger = teleport; panel = A/B, plan floor, EXIT VR. Controllers
+  additionally get left stick move, right stick snap 30°, grip run, A = swap, B =
+  finish, X = recenter, Y = exit.
+- **Exiting must be discoverable** — there is no browser chrome in an immersive session.
+  Three routes: the panel's EXIT VR button, left-controller Y, and the system menu.
+- **Testing without a headset**: `xrFrame(dt, frame)` takes the frame as an argument and
+  reads everything through `renderer.xr.getReferenceSpace()`, so a fake `frame` with
+  `getViewerPose`/`getJointPose` drives the entire input path from the console. Note
+  XR controller objects have `matrixAutoUpdate = false` and three writes `.matrix`
+  directly — setting `.position`/`.rotation` on them in a test does nothing.
 - **Perf on session start**: shadow map 2048→1024 (dispose + null the old map or the
   change is ignored), restored on session end. Fixed foveation is set to 0.7 on the
   first XR frame: r128 predates `renderer.xr.setFoveation` (r131), so it falls back to
