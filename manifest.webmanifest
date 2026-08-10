@@ -1,0 +1,19 @@
+{
+  "name": "Kitchen Walkthrough — Option A vs B",
+  "short_name": "Kitchen VR",
+  "description": "Walkable 3D comparison of two proposed kitchen layouts, from plans S2.2.",
+  "start_url": "kitchen-walkthrough.html",
+  "scope": "./",
+  "id": "/kitchen-viewer/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#0e0d0b",
+  "theme_color": "#1c1a17",
+  "categories": ["utilities", "education"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
