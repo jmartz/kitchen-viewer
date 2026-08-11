@@ -1517,8 +1517,10 @@ function addEvents(){
   // touch: left half = joystick, right half = look
   const stick=document.getElementById('stick'), knob=document.getElementById('knob');
   let moveId=null, lookId=null, mBase=null, lLast=null;
+  const tapTrack = {};                 // identifier -> {x,y,t}, dropped once it drags
   cv.addEventListener('touchstart',e=>{
     for(const t of e.changedTouches){
+      tapTrack[t.identifier] = {x:t.clientX, y:t.clientY, t:nowMs()};
       if(t.clientX<innerWidth/2 && moveId===null){
         moveId=t.identifier; mBase={x:t.clientX,y:t.clientY};
         stick.style.display='block';
@@ -1532,6 +1534,8 @@ function addEvents(){
   },{passive:false});
   cv.addEventListener('touchmove',e=>{
     for(const t of e.changedTouches){
+      const tt = tapTrack[t.identifier];
+      if(tt && Math.hypot(t.clientX-tt.x, t.clientY-tt.y) > 12) delete tapTrack[t.identifier];
       if(t.identifier===moveId){
         let dx=t.clientX-mBase.x, dy=t.clientY-mBase.y;
         const len=Math.hypot(dx,dy), max=48;
@@ -1549,6 +1553,9 @@ function addEvents(){
   },{passive:false});
   cv.addEventListener('touchend',e=>{
     for(const t of e.changedTouches){
+      const tt = tapTrack[t.identifier];
+      delete tapTrack[t.identifier];
+      if(tt && nowMs()-tt.t < 350) screenTap(tt.x, tt.y);   // held still and briefly
       if(t.identifier===moveId){moveId=null;touchMove={x:0,y:0};
         stick.style.display='none';knob.style.left='33px';knob.style.top='33px';}
       if(t.identifier===lookId)lookId=null;
@@ -2273,6 +2280,21 @@ function onSelectionChanged(){
   el('finOne').classList.toggle('on', wallScope === 'one');
 }
 
+/* One tap, whatever produced it. The canvas' touch handlers preventDefault() to
+   stop the page scrolling under the joysticks, which also kills the synthesised
+   mouse events — so on a phone no 'click' ever arrives and this has to be driven
+   from touchend directly. */
+function screenTap(cx, cy){
+  if(overhead || planMode || xrOn) return;
+  const cv = renderer.domElement, r = cv.getBoundingClientRect();
+  _fray.setFromCamera({x:((cx-r.left)/r.width)*2-1,
+                       y:-((cy-r.top)/r.height)*2+1}, camera);
+  if(!pickMode){ tapAt(); return; }             // a tap opens doors
+  const found = pickHits();
+  if(found){ selectKind(found.kind, found.mesh); return; }
+  toast('Nothing adjustable there — try a cabinet, wall or worktop.', 2600);
+}
+
 function finDesktopEvents(){
   const cv = renderer.domElement;
   let downX=0, downY=0, moved=0;
@@ -2281,15 +2303,8 @@ function finDesktopEvents(){
     moved = Math.max(moved, Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY));
   });
   cv.addEventListener('click', e=>{
-    if(overhead || planMode || xrOn) return;
     if(moved > 5) return;                       // that was a drag-look, not a click
-    const r = cv.getBoundingClientRect();
-    _fray.setFromCamera({x:((e.clientX-r.left)/r.width)*2-1,
-                         y:-((e.clientY-r.top)/r.height)*2+1}, camera);
-    if(!pickMode){ tapAt(); return; }           // a tap opens doors
-    const found = pickHits();
-    if(found){ selectKind(found.kind, found.mesh); return; }
-    toast('Nothing adjustable there — try a cabinet, wall or worktop.', 2600);
+    screenTap(e.clientX, e.clientY);
   });
 
   const on = (id, fn) => { const b = document.getElementById(id); if(b) b.onclick = fn; };

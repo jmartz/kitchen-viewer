@@ -35,6 +35,8 @@ CONTROLS
 
 FINISHES
   Click "Finishes" in the top-left panel, then click anything in the room.
+  On a phone or tablet, tap instead - a quick tap picks or opens, while a
+  drag still looks around and the left-hand joystick still walks.
   Everything of that kind lights up, and picking a colour changes all of
   them at once - change one cabinet pull and every pull follows.
 LAYOUTS
