@@ -1071,12 +1071,13 @@ function buildShared(opt){
   place(box(0.2,1.2,1.1,M.black), 5.94, 1.0, ZONE_D+1.55); // dog door
   place(box(0.1,0.06,0.5,M.black), 5.82, 3.1, ZONE_D+2.9);  // lever
   solid(5.76,ZONE_D,0.36,3.15);
-  // pet station: low L-shaped corral in the family-room corner by the dog
-  // door (2'-0" x 1'-4" per plan), open toward the kitchen/door side
-  place(box(0.35,3.0,1.6,M.cab), 8.32,1.5, 12.7);
-  place(box(2.1,3.0,0.35,M.cab), 7.45,1.5, 13.35);
-  place(box(1.6,0.5,1.05,M.cushion), 7.35,0.27, 12.62);   // dog bed
-  solid(8.15,11.9,0.35,1.6); solid(6.4,13.18,2.1,0.35);
+  // The L-shaped pet corral that used to stand in this corner (2'-0" x 1'-4",
+  // drawn on the sheet by the dog door) is removed at Jim's request — it read as
+  // a stray stub wall in the room. The dog door itself stays. To restore it:
+  //   place(box(0.35,3.0,1.6,M.cab), 8.32,1.5, 12.7);
+  //   place(box(2.1,3.0,0.35,M.cab), 7.45,1.5, 13.35);
+  //   place(box(1.6,0.5,1.05,M.cushion), 7.35,0.27, 12.62);   // dog bed
+  //   solid(8.15,11.9,0.35,1.6); solid(6.4,13.18,2.1,0.35);
 
   // ---- family room (x 6.1..21.08, 15'-0" wide) ----
   // west wall facing deck (per photo): french doors + transom, centered
@@ -1140,7 +1141,10 @@ function buildShared(opt){
   // TV on the south wall. Rug between it and the hearth.
   sectional(11.03, 22.0, 8.667, 3.333, M.sofa);
   tv(13.7, SOUTH-WALL_T/2, 3.75, 85, true, -1);   // 85" flatscreen, south wall
-  outlet(6.35,13.6,1.3,false); outlet(20.9,20.0,1.3,false);
+  // z=20.0 put this one dead centre of the pantry doorway once the wall was cut
+  // open for it, so it hung in mid-air. Moved south of the pantry (z 16.44..21.74)
+  // onto wall that still exists.
+  outlet(6.35,13.6,1.3,false); outlet(20.9,23.0,1.3,false);
   outlet(13.5,SOUTH-0.28,1.3,true);
   const rug=new THREE.Mesh(new THREE.PlaneGeometry(F(6),F(9)),M.rug);
   rug.rotation.x=-Math.PI/2; place(rug,12,0.02,ZONE_D+10.7);
