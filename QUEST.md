@@ -15,18 +15,27 @@ Works with **bare hands or controllers** — you don't need to pick anything up.
 
 ## Moving around
 
-**Pinch** (thumb to index finger) and a gold arc appears. Aim it, **let go**, and you
-teleport to the ring. Red arc means you can't stand there. With controllers it's the
-same gesture on the **trigger**.
+**Pinch and hold** with your **right hand**. A grey ray grows out of your hand; once
+it reaches full length (about half a second) the gold teleport arc appears. Aim it,
+**let go**, and you jump to the ring. Red arc means you can't stand there.
 
-That's the whole locomotion system. You can also just walk — the play space maps 1:1
-to the room, and you can't walk through the island.
+A **quick pinch** does not teleport — it's a tap, see below. Only the right hand
+teleports, so your left can't throw you across the room by accident.
 
-## The wrist panel
+You can also just walk — the play space maps 1:1 to the room, and you can't walk
+through the island.
 
-A small panel rides above your **left wrist** (or floats at your lower left if only one
-hand is tracked). It shows which option is live, and has three buttons you press by
-**pushing your right index finger into them**:
+## Tapping things open
+
+A **short pinch** at a fridge door, a wall-oven door, the range, or the pantry
+doors opens it. Tap again to close. On the desktop viewer it's a plain click.
+
+## The control panel
+
+A panel floats **below your eye line, just in front of you**. It stays put while you
+look around and only swings back into place once you've really turned away, so it
+never chases you. Press a button either by **poking it with a finger** or by
+**pointing at it and pinching**.
 
 | Button | Does |
 |---|---|
@@ -58,7 +67,7 @@ the headset (and vice versa) if you use the same link.
 
 Three ways, any of them works:
 
-1. **EXIT VR** on the wrist panel.
+1. **EXIT VR** on the control panel.
 2. The **Meta/Oculus button** on the right controller (or the palm-pinch menu gesture
    with hands) → close the browser window.
 3. **Y** on the left controller.
@@ -71,7 +80,8 @@ Everything above still works, plus:
 
 | Input | Does |
 |---|---|
-| **Trigger** | aim the teleport arc, release to go |
+| **Trigger** (hold) | grow the ray, then aim the arc and release to go |
+| **Trigger** (tap) | open a fridge / oven / pantry door |
 | **Left thumbstick** | glide, in the direction you're looking |
 | **Right thumbstick** ←/→ | 30° snap turn (snap, not smooth — much easier on the stomach) |
 | **Grip** (hold) | move at double speed |
@@ -126,9 +136,10 @@ If the Quest has been in a drawer for a while, budget **an hour** before the dem
 - **Can't see your hands** → hand tracking is off in Settings, or your hands are
   outside the headset cameras' view. The app draws the joints itself; if the joints
   don't show, the headset isn't reporting them.
-- **Pinch does nothing** → you're probably too close to the wrist panel; the panel
-  swallows the pinch so you don't teleport while using the menu. Step your hand away
-  and pinch again.
+- **Pinch does nothing** → a quick pinch is a tap, not a jump. Hold it until the ray
+  grows all the way and the gold arc appears. If you're pointing at the control panel,
+  the panel takes the pinch so you don't teleport while using the menu.
+- **Only the right hand teleports.** That's deliberate.
 - **Still nothing** → try `immersiveweb.dev`. If that can't enter VR either, it's the
   headset, not this page.
 

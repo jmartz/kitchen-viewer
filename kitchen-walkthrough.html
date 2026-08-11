@@ -666,17 +666,18 @@ function applFace(x,z,d,faceW){
 }
 /* tubular bar pull on an appliance front, with standoffs */
 function applPull(x,z,d,faceW,u,y,len,vertical){
-  const R=0.052, OFF=0.155;
+  const R=0.052, OFF=0.155, out=[];
   const bar=new THREE.Mesh(new THREE.CylinderGeometry(F(R),F(R),F(len),14),M.appl);
   if(!vertical) bar.rotation[faceW?'x':'z']=Math.PI/2;
   const px = faceW ? x-OFF : x+u,  pz = faceW ? z+u : z+d+OFF;
-  place(bar, px, y, pz);
+  out.push(place(bar, px, y, pz));
   for(const s of [-1,1]){
     const so=new THREE.Mesh(new THREE.CylinderGeometry(F(0.032),F(0.032),F(OFF),10),M.appl);
     so.rotation[faceW?'z':'x']=Math.PI/2;
     const du = vertical?0:s*(len/2-0.14), dy = vertical?s*(len/2-0.14):0;
-    place(so, faceW?x-OFF/2:x+u+du, y+dy, faceW?z+u+du:z+d+OFF/2);
+    out.push(place(so, faceW?x-OFF/2:x+u+du, y+dy, faceW?z+u+du:z+d+OFF/2));
   }
+  return out;
 }
 /* counter-depth French-door refrigerator: dark carcass, proud door slabs with
    reveal gaps, tubular pulls, toe grille */
@@ -692,16 +693,26 @@ function fridge(x,z,w=3,d=2.4,faceW=false){
   if(faceW) place(box(w-DT,H,d,M.applDk), x+DT+(w-DT)/2, H/2, z+d/2);
   else      place(box(w,H,d-DT,M.applDk), x+w/2, H/2, z+(d-DT)/2);
   put(AW/2, TOE*0.55, AW-2*SIDE, TOE*0.9, 0.05, M.applDk);          // toe grille
+  // Everything below hangs off a hinge so it can be tapped open. Names are
+  // suffixed with the footprint so Option A and Option B fridges don't share
+  // open/closed state.
+  const tag='@'+x.toFixed(1)+','+z.toFixed(1);
   const fh=1.66, fy=TOE+GAP+fh/2;                                    // freezer drawer
-  put(AW/2, fy, AW-2*SIDE, fh, DT, steelFace(AW,fh));
+  const gF=hinge('fz'+tag, x, 0, z, 'slide', F(1.25),
+                 faceW ? new THREE.Vector3(-1,0,0) : new THREE.Vector3(0,0,1));
+  toHinge(gF, put(AW/2, fy, AW-2*SIDE, fh, DT, steelFace(AW,fh)));
   const dy0=TOE+GAP+fh+GAP, dh=H-dy0-SIDE, dy=dy0+dh/2;              // French doors
   const dw=(AW-2*SIDE-GAP)/2;
-  put(SIDE+dw/2,    dy, dw, dh, DT, steelFace(dw,dh));
-  put(AW-SIDE-dw/2, dy, dw, dh, DT, steelFace(dw,dh));
+  const hLx = faceW ? x : x+SIDE,        hLz = faceW ? z+SIDE      : z+d;
+  const hRx = faceW ? x : x+w-SIDE,      hRz = faceW ? z+d-SIDE    : z+d;
+  const gL=hinge('frL'+tag, hLx, 0, hLz, 'y', -1.60);
+  const gR=hinge('frR'+tag, hRx, 0, hRz, 'y',  1.60);
+  toHinge(gL, put(SIDE+dw/2,    dy, dw, dh, DT, steelFace(dw,dh)));
+  toHinge(gR, put(AW-SIDE-dw/2, dy, dw, dh, DT, steelFace(dw,dh)));
   // pulls: verticals flanking the centre split, horizontal on the drawer
-  applPull(x,z,d,faceW, AW/2-GAP/2-0.20, dy-0.15, dh*0.62, true);
-  applPull(x,z,d,faceW, AW/2+GAP/2+0.20, dy-0.15, dh*0.62, true);
-  applPull(x,z,d,faceW, AW/2, fy+fh/2-0.26, AW*0.62, false);
+  applPull(x,z,d,faceW, AW/2-GAP/2-0.20, dy-0.15, dh*0.62, true).forEach(m=>toHinge(gL,m));
+  applPull(x,z,d,faceW, AW/2+GAP/2+0.20, dy-0.15, dh*0.62, true).forEach(m=>toHinge(gR,m));
+  applPull(x,z,d,faceW, AW/2, fy+fh/2-0.26, AW*0.62, false).forEach(m=>toHinge(gF,m));
   solid(x,z,w,d);
 }
 /* induction cooktop: black glass in a slim steel bezel, printed hob rings */
@@ -727,16 +738,21 @@ function wallOven(x,z,w,hEach,y0,alongX=true,out=1){
                   : place(m, x+out*(off+dep/2), y, z+u);
   };
   put(w/2, y0+(2*hEach+GAP)/2, w+0.06, 2*hEach+GAP+0.06, 0.05, M.applDk, -0.04);
+  const tag='@'+x.toFixed(1)+','+z.toFixed(1);
   for(let i=0;i<2;i++){
     const oy=y0+i*(hEach+GAP);
-    put(w/2, oy+hEach/2, w, hEach, DT, steelFace(w,hEach));               // door slab
-    put(w/2, oy+hEach-0.14, w-0.16, 0.24, 0.03, M.applGl, DT-0.01);       // control strip
+    // Wall ovens are bottom-hinged: the leaf drops forward about the axis that
+    // runs along the face, so 'x' when the run goes along x and 'z' otherwise.
+    const g=hinge('ov'+i+tag, x, oy, z, alongX?'x':'z',
+                  alongX ? 1.45*out : -1.45*out);
+    toHinge(g, put(w/2, oy+hEach/2, w, hEach, DT, steelFace(w,hEach)));   // door slab
+    toHinge(g, put(w/2, oy+hEach-0.14, w-0.16, 0.24, 0.03, M.applGl, DT-0.01));
     const gh=hEach-0.46;
-    put(w/2, oy+0.07+gh/2, w-0.34, gh, 0.03, M.applGl, DT-0.01);          // glass window
+    toHinge(g, put(w/2, oy+0.07+gh/2, w-0.34, gh, 0.03, M.applGl, DT-0.01));
     const bar=new THREE.Mesh(new THREE.CylinderGeometry(F(0.05),F(0.05),F(w-0.22),14),M.appl);
     bar.rotation[alongX?'z':'x']=Math.PI/2;
-    if(alongX) place(bar, x+w/2, oy+hEach-0.40, z+out*(DT+0.13));
-    else       place(bar, x+out*(DT+0.13), oy+hEach-0.40, z+w/2);
+    toHinge(g, alongX ? place(bar, x+w/2, oy+hEach-0.40, z+out*(DT+0.13))
+                      : place(bar, x+out*(DT+0.13), oy+hEach-0.40, z+w/2));
   }
 }
 /* Undermount sink. (x,z,w,d) is the countertop CUTOUT — pass the same rect to
@@ -968,6 +984,14 @@ const FAM_XI = ZONE_W;                     // 21.08  interior face, east family 
 const FAM_XE = ZONE_W + WALL_T;            // 21.53  outer face, east family wall
 const FAM_WV = FAM_XI - FAM_XWI;           // 14.755 clear vaulted span, face to face
 const PASS_Z0 = 11.76, PASS_Z1 = 15.58;    // open passage kitchen/nook -> family
+// South wall of the dining room, line-scanned off the sheet: drawn faces at
+// z 15.98 and 16.44, so the centreline wallSeg wants is 16.21. It used to reuse
+// PASS_Z1, which is the passage edge and a different thing entirely - that put
+// the wall 7-1/2" north of where it is drawn.
+const DIN_S = 16.21, DIN_S_FACE = 15.98;
+// (E) PANTRY off the family room, line-scanned: x 21.08..22.98 (1'-11" deep),
+// z 16.44..21.74 (5'-4" wide). Doors on the west face, into the family room.
+const PAN_X0 = 21.08, PAN_X1 = 22.98, PAN_Z0 = 16.44, PAN_Z1 = 21.74, PAN_H = 6.8;
 // Eave lands on the wall INTERIOR faces; the walls then run a few inches past it
 // so slope and wall overlap instead of meeting edge-on (an edge-on join leaks the
 // background through as a hairline). The stub above the eave is hidden by the slope.
@@ -1107,7 +1131,10 @@ function buildShared(opt){
   // family south wall; east wall starts at the bath block (leaves the
   // passage into dining between z=PASS_Z0 and z=PASS_Z1)
   wallSeg(FAM_XW,SOUTH, FAM_XE-FAM_XW, true, [], M.wall, FAM_H);
-  wallSeg(ZONE_W+WALL_T/2,PASS_Z1, SOUTH+WALL_T/2-PASS_Z1, false, [], M.wall, FAM_H);
+  wallSeg(ZONE_W+WALL_T/2,PASS_Z1, SOUTH+WALL_T/2-PASS_Z1, false,
+          [{o:PAN_Z0-PASS_Z1, w:PAN_Z1-PAN_Z0, sill:0, head:PAN_H, noGlass:true}],
+          M.wall, FAM_H);
+  pantry();
   // Interior Define "James" 4-seat corner sectional, 104" x 104" x 40" deep,
   // Azure. Corner at the NE: east leg faces the fireplace, north leg faces the
   // TV on the south wall. Rug between it and the hearth.
@@ -1129,10 +1156,10 @@ function buildShared(opt){
   // ---- dining (extends south to the bath/pantry block at z=PASS_Z1) ----
   wallSeg(ZONE_W,0, DIN_W+0.75, true, []);                    // north wall over dining
   wallSeg(ZONE_W+DIN_W+WALL_T,0, PASS_Z1, false, [{o:3,w:5,sill:3,head:7}]); // east outer
-  wallSeg(ZONE_W,PASS_Z1, DIN_W+0.75, true, []);                // bath/pantry block wall
-  const cd = new THREE.Mesh(new THREE.PlaneGeometry(F(DIN_W),F(PASS_Z1-ZONE_D)), M.ceil);
+  wallSeg(ZONE_W,DIN_S, DIN_W+0.75, true, []);                  // bath/pantry block wall
+  const cd = new THREE.Mesh(new THREE.PlaneGeometry(F(DIN_W),F(DIN_S_FACE-ZONE_D)), M.ceil);
   cd.rotation.x=Math.PI/2; cd.castShadow=true;
-  place(cd,ZONE_W+DIN_W/2,CEIL,(PASS_Z1+ZONE_D)/2);
+  place(cd,ZONE_W+DIN_W/2,CEIL,(DIN_S_FACE+ZONE_D)/2);
   diningSet(ZONE_W+DIN_W/2, 6.8);
 
   // recessed ceiling lights, kitchen zone grid
@@ -1251,8 +1278,9 @@ function buildOptionB(){
   shakerRun(ZONE_W-2.08,6.2, 2.35, false, -1);
   cooktop(ZONE_W-2.0,4.0, 1.9, 1.9);
   // slide-in range: oven below the cooktop, face flush with the cabinet front
-  place(box(0.13,BASE_H,2.5,steelFace(2.5,BASE_H)), ZONE_W-2.145, BASE_H/2, 4.95);
-  place(box(0.04,1.30,2.02,M.applGl), ZONE_W-2.23, 1.30, 4.95);  // oven door glass
+  const gRange=hinge('range', ZONE_W-2.145, 0.10, 4.95, 'z', 1.45);
+  toHinge(gRange, place(box(0.13,BASE_H,2.5,steelFace(2.5,BASE_H)), ZONE_W-2.145, BASE_H/2, 4.95));
+  toHinge(gRange, place(box(0.04,1.30,2.02,M.applGl), ZONE_W-2.23, 1.30, 4.95));  // oven door glass
   place(box(0.04,0.30,2.10,M.applGl), ZONE_W-2.23, 2.66, 4.95);  // control panel
   const rbar=new THREE.Mesh(new THREE.CylinderGeometry(F(0.05),F(0.05),F(2.2),14),M.appl);
   rbar.rotation.x=Math.PI/2; place(rbar, ZONE_W-2.34, 2.24, 4.95); // handle
@@ -1365,7 +1393,7 @@ function init(){
 }
 function buildOption(key){
   if(world) scene.remove(world);
-  world = new THREE.Group(); solids = [];
+  world = new THREE.Group(); solids = []; openables = [];
   buildShared(key); OPTS[key].build();
   scene.add(world);
   applyFinishes();          // colours survive an A/B or finish rebuild
@@ -1563,11 +1591,13 @@ function animate(time, frame){
     // getting frames and the only way out is the Meta button. Never let one
     // frame's bug take the session down — log it and keep drawing, so EXIT VR
     // is still reachable.
+    updateOpenables(dt);
     try{ xrFrame(dt, frame); }        // `frame` reaches hand joints + viewer pose
     catch(e){ xrTrouble(e); }
     renderer.render(scene,camera);    // camera pose comes from the headset
     return;
   }
+  updateOpenables(dt);
   if(planMode){
     drawPlan();
     return;
@@ -1599,6 +1629,130 @@ function animate(time, frame){
   }
   drawMapDyn();
   renderer.render(scene,camera);
+}
+
+/* ============================================================
+   §DOOR — things that open when you tap them
+   ------------------------------------------------------------
+   A door is a Group parked on its hinge line with the leaf reparented into it,
+   so opening is one rotation (or one translation, for drawers). Three axes are
+   needed: 'y' swings a cabinet or fridge door, 'x'/'z' drops a wall-oven door
+   forward, 'slide' pulls a drawer out.
+
+   Open state lives in DOORS, keyed by name, so it survives the world rebuild
+   that an A/B or finish change triggers. `openables` is the live list and is
+   rebuilt with the world.
+   ============================================================ */
+const DOORS = {};
+let openables = [];
+
+function hinge(name, hx, hy, hz, axis, openA, dir){
+  const g = new THREE.Group();
+  g.position.set(F(hx), F(hy), F(hz));
+  g.userData.door = {name:name, axis:axis, open:openA, dir:dir||null,
+                     t: DOORS[name] ? 1 : 0, base: g.position.clone()};
+  applyDoor(g);
+  world.add(g);
+  openables.push(g);
+  return g;
+}
+/* reparent a mesh that was placed in world coords onto its hinge */
+function toHinge(g, mesh){
+  if(!mesh) return mesh;
+  mesh.position.sub(g.userData.door.base);
+  g.add(mesh);
+  return mesh;
+}
+function applyDoor(g){
+  const d = g.userData.door;
+  const e = d.t*d.t*(3-2*d.t);              // smoothstep: eases at both ends
+  if(d.axis === 'slide') g.position.copy(d.base).addScaledVector(d.dir, d.open*e);
+  else g.rotation[d.axis] = d.open*e;
+}
+function updateOpenables(dt){
+  for(const g of openables){
+    const d = g.userData.door, want = DOORS[d.name] ? 1 : 0;
+    if(Math.abs(d.t - want) < 0.0015){ if(d.t !== want){ d.t = want; applyDoor(g); } continue; }
+    d.t += (want - d.t) * Math.min(1, dt*4.0);
+    applyDoor(g);
+  }
+}
+/* nearest ancestor that is a door, so tapping any part of a leaf works */
+function doorOf(obj){
+  let o = obj;
+  while(o){ if(o.userData && o.userData.door) return o; o = o.parent; }
+  return null;
+}
+function toggleDoor(g){
+  const n = g.userData.door.name;
+  DOORS[n] = DOORS[n] ? 0 : 1;
+  return !!DOORS[n];
+}
+/* tap handling shared by the mouse and by a short pinch in VR */
+function tapAt(){
+  if(!world) return null;
+  world.updateMatrixWorld(true);
+  _fray.far = 60;
+  const hits = _fray.intersectObject(world, true);
+  for(const h of hits){
+    const g = doorOf(h.object);
+    if(g){ toggleDoor(g); return g; }
+  }
+  return null;
+}
+
+/* ---- bifold pantry doors: white solid two-panel leaves ----
+   Each unit is a pair of leaves. The outer leaf swings off the jamb; the inner
+   one is parented to it and counter-rotates by twice as much, which is what
+   makes a bifold fold back against itself instead of swinging wide. Both leaves
+   share a DOORS name so they animate as one. */
+function bifoldLeaf(g, xFace, za, zb, H){
+  const T = 0.13, S = 0.26, dir = Math.sign(zb - za), w = Math.abs(zb - za);
+  const xc = xFace + T/2, zMid = (za + zb)/2;
+  toHinge(g, place(box(T, H, S, M.door), xc, H/2, za + dir*S/2));       // stiles
+  toHinge(g, place(box(T, H, S, M.door), xc, H/2, zb - dir*S/2));
+  toHinge(g, place(box(T, S, w-2*S, M.door), xc, S/2, zMid));           // rails
+  toHinge(g, place(box(T, S, w-2*S, M.door), xc, H-S/2, zMid));
+  toHinge(g, place(box(T, S, w-2*S, M.door), xc, H*0.46, zMid));
+  // the two flat panels, set back a touch so the frame reads
+  const p1h = H*0.46 - S*1.5, p2h = H - H*0.46 - S*1.5;
+  toHinge(g, place(box(T*0.55, p1h, w-2*S-0.04, M.door), xc+T*0.16, S + p1h/2, zMid));
+  toHinge(g, place(box(T*0.55, p2h, w-2*S-0.04, M.door), xc+T*0.16, H*0.46+S*0.5+p2h/2, zMid));
+  return g;
+}
+function bifold(name, xFace, zJamb, zEnd, H){
+  const dir = Math.sign(zEnd - zJamb), half = Math.abs(zEnd - zJamb)/2;
+  const A = hinge(name, xFace, 0, zJamb, 'y', -1.32*dir);
+  bifoldLeaf(A, xFace, zJamb, zJamb + dir*half, H);
+  const B = hinge(name, xFace, 0, zJamb + dir*half, 'y', 2.64*dir);
+  bifoldLeaf(B, xFace, zJamb + dir*half, zEnd, H);
+  const k = new THREE.Mesh(new THREE.SphereGeometry(F(0.075),10,10), M.brass);
+  toHinge(B, place(k, xFace - 0.06, H*0.44, zEnd - dir*0.28));
+  foldInto(A, B);
+  return A;
+}
+/* reparent an inner leaf onto its outer leaf, keeping its hinge line put */
+function foldInto(outer, inner){
+  inner.position.sub(outer.userData.door.base);
+  inner.userData.door.base.copy(inner.position);
+  outer.add(inner);
+}
+
+/* ---- (E) PANTRY: reach-in off the family room, louvered pair ----
+   Footprint line-scanned off the sheet, see PAN_* constants. */
+function pantry(){
+  const x0=PAN_X0, x1=PAN_X1, z0=PAN_Z0, z1=PAN_Z1, H=PAN_H;
+  const w = z1 - z0, d = x1 - x0;
+  place(box(0.12, H, w, M.cab), x1-0.06, H/2, (z0+z1)/2);            // back
+  place(box(d, H, 0.12, M.cab), (x0+x1)/2, H/2, z0+0.06);            // side walls -
+  place(box(d, H, 0.12, M.cab), (x0+x1)/2, H/2, z1-0.06);            // without these
+  place(box(d, 0.14, w, M.cab), (x0+x1)/2, H-0.07, (z0+z1)/2);       // you see daylight
+  for(const sy of [1.35, 2.55, 3.75, 4.95, 6.05])                    // shelves
+    place(box(d-0.16, 0.11, w-0.20, M.cab), (x0+x1)/2 + 0.06, sy, (z0+z1)/2);
+  solid(x0, z0, d, w);
+  const half = w/2;
+  bifold('pantry-N', x0, z0, z0+half, H);
+  bifold('pantry-S', x0, z1, z1-half, H);
 }
 
 /* ============================================================
@@ -1997,11 +2151,12 @@ function finDesktopEvents(){
     moved = Math.max(moved, Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY));
   });
   cv.addEventListener('click', e=>{
-    if(!pickMode || overhead || planMode || xrOn) return;
-    if(moved > 5) return;                       // that was a drag-look, not a pick
+    if(overhead || planMode || xrOn) return;
+    if(moved > 5) return;                       // that was a drag-look, not a click
     const r = cv.getBoundingClientRect();
     _fray.setFromCamera({x:((e.clientX-r.left)/r.width)*2-1,
                          y:-((e.clientY-r.top)/r.height)*2+1}, camera);
+    if(!pickMode){ tapAt(); return; }           // a tap opens doors
     const found = pickHits();
     if(found){ selectKind(found.kind, found.mesh); return; }
     toast('Nothing adjustable there — try a cabinet, wall or worktop.', 2600);
@@ -2114,12 +2269,8 @@ function setupXR(){
       if(aimCtrl === c) cancelAim();
     });
     // a controller trigger and a hand pinch both raise select
-    c.addEventListener('selectstart', ()=>{
-      if(nearPanel(c)) return;                    // the menu handles its own presses
-      if(pickMode){ const h=vrPickFrom(c); if(h) selectKind(h.kind, h.mesh); return; }
-      aimCtrl = c;
-    });
-    c.addEventListener('selectend',   ()=>{ if(aimCtrl === c) commitTeleport(); });
+    c.addEventListener('selectstart', ()=>{ onSelectStart(c); });
+    c.addEventListener('selectend',   ()=>{ onSelectEnd(c); });
     rig.add(c);
     xrCtrls.push(c);
   }
@@ -2140,6 +2291,8 @@ function setupXR(){
     // norm and buys back a full bit of depth buffer everywhere.
     camera.near = 0.10; camera.updateProjectionMatrix();
     needRecenter = true; foveated = false; headOK = false;
+    panelReady = false; holdCtrl = null; aimDirS = null;
+    if(panel) panel.userData.placed = false;
   });
 
   renderer.xr.addEventListener('sessionend', ()=>{
@@ -2227,11 +2380,15 @@ function cancelAim(){
   aimCtrl = null; aimValid = false;
   if(arcLine){ arcLine.visible = false; arcRing.visible = false; }
 }
+let aimDirS = null;
 function updateAim(){
   ensureArc();
   aimCtrl.getWorldPosition(_v);
   aimCtrl.getWorldQuaternion(_q);
-  const vx = _v2.set(0,0,-1).applyQuaternion(_q).multiplyScalar(ARC_V);
+  // low-pass the aim direction; raw hand tracking makes the landing ring dance
+  const raw = new THREE.Vector3(0,0,-1).applyQuaternion(_q).normalize();
+  if(!aimDirS) aimDirS = raw.clone(); else aimDirS.lerp(raw, 0.22).normalize();
+  const vx = _v2.copy(aimDirS).multiplyScalar(ARC_V);
   const arr = arcLine.geometry.attributes.position.array;
   let hit=false, hx=0, hz=0, prevX=_v.x, prevY=_v.y, prevZ=_v.z;
   arr[0]=prevX; arr[1]=prevY; arr[2]=prevZ;
@@ -2290,7 +2447,7 @@ function commitTeleport(){
    also flips `pickMode` so a pinch out in the room selects a surface instead
    of teleporting. Hit regions come from the same item list that was last
    drawn, so what you poke is always what you see. */
-let panel=null, panelTex=null, panelKey='', panelHot=-1, pokeArmed=true, anchorC=null;
+let panel=null, panelTex=null, panelKey='', panelHot=-1, pokeArmed=true;
 let panelPage='main', panelCache=[];
 const PANEL_W=0.30, PANEL_H=0.20, PC_W=420, PC_H=280;
 
@@ -2519,19 +2676,16 @@ function xrFrame(dt, frame){
   }
 
   /* ---- read every input, hand or controller ---- */
-  let mx=0, mz=0, run=1, leftAnchor=null;
+  let mx=0, mz=0, run=1;
   const pokeTips = [];
   const dz = v => Math.abs(v) < DEAD ? 0 : (v - Math.sign(v)*DEAD)/(1-DEAD);
-  anchorC = null;
 
   for(const c of xrCtrls){
     const joints = updateHand(c, frame);
     if(joints){
       if(joints.tip) pokeTips.push({c, p:joints.tip});
-      if(c.userData.hand === 'left' && joints.wrist){ leftAnchor = joints.wrist; anchorC = c; }
     } else if(c.userData.src){
       pokeTips.push({c, p:c.position.clone()});
-      if(c.userData.hand === 'left'){ leftAnchor = c.position.clone(); anchorC = c; }
     }
 
     const gp = c.userData.gp;
@@ -2558,39 +2712,38 @@ function xrFrame(dt, frame){
     }
   }
 
-  /* ---- park the panel on the left wrist, or lower-left of view if there is
-         no left hand to hang it on ---- */
   ensurePanel();
   panel.visible = true;
-  if(leftAnchor){
-    panel.position.copy(leftAnchor);
-    panel.position.y += 0.11;
-  } else {
-    panel.position.copy(_v2.set(-0.20,-0.22,-0.50).applyQuaternion(headQuat).add(headPos));
-  }
-  panel.lookAt(headWorld(_v));
-  panel.updateMatrix();
+  placePanel(dt);
 
-  /* ---- poke: the hand the panel hangs off can't press its own buttons ---- */
-  let hotNow = -1;
+  /* ---- poke to press, point to highlight ---- */
+  let pokeNow = -1;
   for(const t of pokeTips){
-    if(anchorC && t.c === anchorC) continue;
     const i = panelPick(t.p);
-    if(i !== null && i >= 0){ hotNow = i; break; }
+    if(i !== null && i >= 0){ pokeNow = i; break; }
   }
-  if(hotNow >= 0 && pokeArmed){
-    const it = panelCache[hotNow];        // panelCache, not the old flat button list
+  if(pokeNow >= 0 && pokeArmed){
+    const it = panelCache[pokeNow];
     if(it && it.act) it.act();
     pokeArmed = false;
   }
-  if(hotNow < 0) pokeArmed = true;
-  panelHot = hotNow;
+  if(pokeNow < 0) pokeArmed = true;
+  const pc = pointerCtrl();
+  let hoverNow = -1;
+  if(pokeNow < 0 && pc){
+    const i = panelRayPick(pc);
+    if(i !== null && i >= 0) hoverNow = i;
+  }
+  panelHot = pokeNow >= 0 ? pokeNow : hoverNow;
   drawPanel();
 
+  /* ---- pointer / teleport arc ---- */
   if(pickMode){
-    const live = xrCtrls.filter(c=>c.userData.src);
-    const rc = live.filter(c=>c.userData.hand==='right')[0] || live[0];
-    if(rc) updatePickRay(rc); else cancelAim();
+    if(pc) updatePickRay(pc); else cancelAim();
+  } else if(holdCtrl){
+    const held = (nowMs() - (holdCtrl.userData.tDown||0))/1000;
+    if(held >= TELE_HOLD){ aimCtrl = holdCtrl; updateAim(); }
+    else drawHoldRay(holdCtrl, held/TELE_HOLD);
   } else if(aimCtrl) updateAim();
 
   /* ---- smooth locomotion (controller sticks; hands teleport instead) ---- */
@@ -2613,6 +2766,112 @@ function xrFrame(dt, frame){
   rig.position.z += c2[1] - _v.z;
   rig.updateMatrixWorld(true);
   pos.set(c2[0], F(5.6), c2[1]);
+}
+
+/* The panel used to ride the left wrist. In practice it jittered with tracking
+   noise, jumped across the room the moment the left hand left the cameras' view,
+   and its left-hand column was effectively unreachable - you had to push your
+   right hand through your own forearm to get at it. It is body-locked now: a
+   lectern floating below eye line that follows the head lazily, so it holds
+   still while you look around and never ends up behind your arm. */
+let panelYaw = 0, panelReady = false;
+const PANEL_DIST = 0.54, PANEL_DROP = 0.33, PANEL_SLACK = 0.5;
+function placePanel(dt){
+  const f = _v2.set(0,0,-1).applyQuaternion(headQuat); f.y = 0;
+  const hy = (f.lengthSq() > 1e-6) ? Math.atan2(f.x, f.z) : panelYaw;
+  if(!panelReady){ panelYaw = hy; panelReady = true; }
+  let d = hy - panelYaw;
+  while(d >  Math.PI) d -= 2*Math.PI;
+  while(d < -Math.PI) d += 2*Math.PI;
+  // dead zone, then ease: it only re-aims once you have really turned away
+  if(Math.abs(d) > PANEL_SLACK)
+    panelYaw += Math.sign(d) * (Math.abs(d) - PANEL_SLACK) * Math.min(1, dt*2.5);
+  const tx = headPos.x + Math.sin(panelYaw)*PANEL_DIST;
+  const tz = headPos.z + Math.cos(panelYaw)*PANEL_DIST;
+  const ty = headPos.y - PANEL_DROP;
+  if(!panel.userData.placed){ panel.position.set(tx,ty,tz); panel.userData.placed = true; }
+  else panel.position.lerp(_v2.set(tx,ty,tz), Math.min(1, dt*7));
+  panel.lookAt(headWorld(_v));
+  panel.updateMatrix();
+}
+/* the one hand that points and teleports - right if we have it */
+function pointerCtrl(){
+  const live = xrCtrls.filter(c=>c.userData.src);
+  return live.filter(c=>c.userData.hand === 'right')[0] || live[0] || null;
+}
+/* ray-vs-panel, returns the item index under the pointer */
+const _pv = new THREE.Vector3();
+function panelRayPick(c){
+  if(!panel || !panel.visible) return null;
+  c.getWorldPosition(_v); c.getWorldQuaternion(_q);
+  _fray.set(_v.clone(), _pv.set(0,0,-1).applyQuaternion(_q).normalize().clone());
+  _fray.far = 4;
+  const hit = _fray.intersectObject(panel, false)[0];
+  if(!hit) return null;
+  rig.updateMatrixWorld(true);
+  _m.copy(rig.matrixWorld).invert();
+  return panelPick(_pv.copy(hit.point).applyMatrix4(_m));
+}
+/* a straight ray that grows while you hold, so the dwell is visible rather than
+   mysterious; at full length the teleport arc takes over */
+function drawHoldRay(c, frac){
+  ensureArc();
+  c.getWorldPosition(_v); c.getWorldQuaternion(_q);
+  const d = _pv.set(0,0,-1).applyQuaternion(_q).normalize();
+  const len = 0.25 + 1.5*Math.min(1, frac);
+  const arr = arcLine.geometry.attributes.position.array;
+  for(let i=0;i<ARC_N;i++){
+    const s = (i/(ARC_N-1))*len;
+    arr[i*3]=_v.x+d.x*s; arr[i*3+1]=_v.y+d.y*s; arr[i*3+2]=_v.z+d.z*s;
+  }
+  arcLine.geometry.attributes.position.needsUpdate = true;
+  arcLine.visible = true;
+  arcLine.material.color.setHex(0x6d6a63);
+  arcRing.visible = false;
+}
+/* Short press acts on what you point at; only a deliberate hold teleports, and
+   only from one hand. Tapping used to fire a jump on the faintest pinch. */
+const TELE_HOLD = 0.45, TELE_COOL = 350;
+let holdCtrl = null, teleAt = 0;
+function nowMs(){ return (typeof performance !== 'undefined') ? performance.now() : 0; }
+function onSelectStart(c){
+  c.userData.tDown = nowMs();
+  c.userData.mode = null;
+  if(nearPanel(c) || panelRayPick(c) !== null){ c.userData.mode = 'ui'; return; }
+  if(pickMode){ c.userData.mode = 'finish'; return; }
+  if(c === pointerCtrl() && nowMs() - teleAt > TELE_COOL){
+    c.userData.mode = 'hold';
+    holdCtrl = c;
+    aimDirS = null;
+  } else c.userData.mode = 'tap';
+}
+function onSelectEnd(c){
+  const held = (nowMs() - (c.userData.tDown||0))/1000;
+  const mode = c.userData.mode;
+  c.userData.mode = null;
+  if(holdCtrl === c) holdCtrl = null;
+  if(mode === 'ui'){
+    const i = panelRayPick(c);
+    const j = (i === null || i < 0) ? panelPick(c.position) : i;
+    if(j !== null && j >= 0 && panelCache[j] && panelCache[j].act) panelCache[j].act();
+    return;
+  }
+  if(mode === 'finish'){
+    const h = vrPickFrom(c);
+    if(h) selectKind(h.kind, h.mesh);
+    return;
+  }
+  if(mode === 'hold' && held >= TELE_HOLD && aimCtrl === c){
+    commitTeleport();
+    teleAt = nowMs();
+    return;
+  }
+  cancelAim();
+  if(held < TELE_HOLD){                       // a tap: open whatever it hit
+    c.getWorldPosition(_v); c.getWorldQuaternion(_q);
+    _fray.set(_v.clone(), _pv.set(0,0,-1).applyQuaternion(_q).normalize().clone());
+    tapAt();
+  }
 }
 
 async function initVRButton(){

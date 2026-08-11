@@ -104,6 +104,14 @@ Start-viewer.bat, README.txt, PROJECT.md, QUEST.md
 - Kitchen/dining wall: body x 21.08–21.53 (z 0–11.76); the **family east wall is
   flush** with it at x 21.08–21.53 from z 15.58 south (the old 5" jog was a
   registration artifact); open passage z 11.76–15.58 (~3'-10").
+- **Dining south wall** (the bath/pantry block): drawn faces z **15.98 / 16.44**, so
+  `wallSeg` wants centreline **DIN_S = 16.21**. It used to reuse `PASS_Z1` (15.58),
+  which is the *passage* edge and a different thing — that drew the wall 7-1/2" north
+  of where it is on the sheet. Confirmed identical at x = 23, 26 and 30.
+- **(E) PANTRY** off the family room: x **21.08–22.98** (1'-11" deep), z **16.44–21.74**
+  (5'-4" wide), doors on the west face. Its west edge is a *single-pixel* line on the
+  raster — a `MIN_RUN_PX = 2` filter silently swallowed it, so scan results near a
+  suspected wall are worth re-checking with the run filter off.
 - Family room x 6.1–21.08, z 12.17–35.09; fireplace footprint x 4.66–6.62
   (proud toward deck), z 20.67–27.27; north French doors z 15.02–20.42; south
   door+sidelites z 27.77–34.17. Deck x −14.9–6.1, stairs at NW.
@@ -126,9 +134,11 @@ Three independent checks; between them they caught every major bug.
    `xvfb-run -a node render_run.js`. Canvas textures are converted to DataTextures
    (row-flipped) because headless-gl can't ingest node-canvas objects; the GL
    context needs `glctx.canvas = fakeCanvas` attached.
-4. **Raster line-scan** (technique, in `assemble.py` helpers): to locate any drawn
-   element, scan a pixel row/column for dark runs and convert via origin + 50 px/ft.
-   This is the *only* trusted way to measure the drawing.
+4. **Raster line-scan** — now a real tool, `tools/linescan.py`:
+   `python tools/linescan.py col <x_ft> <z0> <z1>` cuts a vertical sample and prints
+   every dark run in model feet; `row` does the same horizontally; `crop` writes a 2x
+   PNG of a footage window so the drawing can be *looked at* without ever measuring
+   from screen pixels. This is the only trusted way to measure the sheet (L2).
 
 ## 6. What We Learned (hard-won — read before continuing)
 
@@ -199,7 +209,25 @@ Three independent checks; between them they caught every major bug.
   under-cabinet lighting, toe kicks.
 - **Decision support**: side-by-side A/B split screen, cost/impact notes overlay.
 
-## 9. Finish editor (§FIN in the HTML)
+## 9. Openable doors (§DOOR in the HTML)
+
+Tap a fridge door, a wall-oven door, the range or the pantry and it opens.
+
+- A door is a Group parked on its hinge line with the leaf reparented into it via
+  `toHinge()`, so opening is one rotation. Three axes are needed: `y` swings a
+  fridge or pantry door, `x`/`z` drops a wall-oven door forward (they are bottom
+  hinged), `slide` pulls the freezer drawer out.
+- Open state lives in `DOORS` keyed by name and so survives the world rebuild an
+  A/B or finish change triggers; `openables` is the live list, rebuilt with the
+  world. Fridge names carry their footprint so Option A and B don't share state.
+- **Bifold**: the inner leaf is a second hinge parented to the outer one via
+  `foldInto()` and counter-rotates by twice the angle — that is what makes a
+  bifold fold back on itself rather than swing wide. Both leaves share one DOORS
+  name, so they animate as a unit for free.
+- Tap vs teleport is disambiguated by dwell (see §10), which is why a short pinch
+  can mean "open this" without a modal state.
+
+## 10. Finish editor (§FIN in the HTML)
 
 Point at a surface, recolour every one of them. Works on desktop (click + HTML
 panel) and in VR (pinch + wrist-panel swatches); both drive the same engine.
@@ -250,7 +278,7 @@ panel) and in VR (pinch + wrist-panel swatches); both drive the same engine.
 - Deliberately **not** adjustable, per the brief: floors, ceiling, and uppers vs
   bases as separate kinds.
 
-## 10. VR / WebXR (§XR in the HTML)
+## 11. VR / WebXR (§XR in the HTML)
 
 Delivery: **https://jmartz.github.io/kitchen-viewer/** opened in the Quest Browser.
 `QUEST.md` is the user-facing guide (controls + headset setup checklist).
@@ -302,6 +330,20 @@ Delivery: **https://jmartz.github.io/kitchen-viewer/** opened in the Quest Brows
   finish, X = recenter, Y = exit.
 - **Exiting must be discoverable** — there is no browser chrome in an immersive session.
   Three routes: the panel's EXIT VR button, left-controller Y, and the system menu.
+- **L18 — wrist-mounted UI is a trap.** The panel rode the left wrist and was
+  unusable: it jittered with tracking noise, teleported across the room whenever
+  the left hand left the cameras' view, and its left-hand column could only be
+  reached by pushing the right hand *through* the left forearm. It is body-locked
+  now — a lectern below eye line with a yaw dead zone (`PANEL_SLACK`) and an eased
+  follow, so it holds still while you look around. Measured: 0.000 m drift while
+  still, 0.000 m on a 0.3 rad head turn, 0.56 m re-aim on a 1.6 rad turn.
+- **L19 — a raw press is not an intent.** Teleport fired on the faintest pinch,
+  which reads as "jumpy". Press now resolves by dwell: under 0.45 s is a tap (open
+  a door, press a button), over it arms the arc. A grey ray grows during the dwell
+  so the wait is visible rather than mysterious, and only `pointerCtrl()` — the
+  right hand — can teleport at all, with a 350 ms cooldown after each jump. The
+  aim direction is low-passed because raw hand tracking makes the landing ring
+  dance.
 - **L16 — an exception in the XR frame loop freezes the headset.** Not a dropped
   frame, not a console error you can ignore: the session stops being fed frames
   and the only way out is the Meta button and force-quit. A stale `PANEL_BTNS`
@@ -330,7 +372,7 @@ Delivery: **https://jmartz.github.io/kitchen-viewer/** opened in the Quest Brows
   simply never appears and there is no error to see. The page now detects
   `!window.isSecureContext` and says so out loud rather than failing silently.
 
-## 11. Session Continuity
+## 12. Session Continuity
 
 Claude's memory for this project lives under `/areas/kitchen-viewer.md` (project
 history, corrections, and the L2/L3-class lessons are recorded there), so a new

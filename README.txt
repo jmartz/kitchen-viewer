@@ -59,8 +59,10 @@ IN VR (Meta Quest) - hands or controllers, either works
   the gold "Enter VR" button. NOT the localhost/LAN address - WebXR needs
   https, and the button won't appear on a plain http:// address.
   You start in the family room looking north into the kitchen.
-    PINCH (or squeeze the trigger)  aim the gold arc, let go to teleport
-    WRIST PANEL, left wrist         poke it with your right index finger:
+    PINCH AND HOLD (right hand)     a ray grows, then the gold arc appears;
+                                    let go to jump. Short pinch = tap.
+    SHORT PINCH / CLICK             opens fridge, oven, range and pantry doors
+    CONTROL PANEL, below eye line   poke it, or point at it and pinch:
                                       A/B  swap option
                                       PLAN  scanned sheet on the floor at 1:1
                                       EXIT VR  end the session
