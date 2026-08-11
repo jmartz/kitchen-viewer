@@ -16,6 +16,10 @@ cdnjs) containing both kitchen options, walkable in first person, with:
   ending the 10'-5" north run, fridge in the 3'-2" bay, 16"-deep pantry in the 3'-0"
   bay, sink under the west 6' sliding window, banquette nook (L-bench + 2' × 8'-4"
   pedestal table) against the 11'-9" dining wall.
+- **Kitchen A′**: Kitchen A with the 16"-deep pantry bay rebuilt as a 42"-counter
+  coffee/morning station (appliance garage, oak shelves, machine + kettle, outlet,
+  openable base doors). Same footprint, so no aisle changes; the (E) pantry off the
+  family room absorbs the dry goods. Third position on the kitchen toggle.
 - **Option B**: nook moves west under the sliding window; galley-U east: 8' peninsula
   with tucked stools, sink under a north window, slide-in range + fridge on the
   dining wall.
@@ -189,6 +193,21 @@ Three independent checks; between them they caught every major bug.
 5. Work in Cowork with a live browser from day one for interactive-framerate
    feedback (this transfer is that step).
 6. textures/ folder + localhost launcher from the start; procedural is fallback.
+
+### Walkability audit (maximin-clearance pathfinder over solids[], Aug 2026)
+Corridor widths = widest body that can make the trip, endpoint zones excluded;
+face-to-face numbers cross-checked against the line-scanned constants.
+- Kitchen A/A′: sink→fridge bottleneck **37.8"** (north aisle at the fridge box);
+  east passage to dining **~46"**; island-east↔nook-chair gap ~25" with chairs
+  tucked (the one genuinely tight spot); deck-door route pinches to ~33" past the
+  open door leaf.
+- Kitchen B: galley interior ~8' clear; no sub-36" corridors. Banquette seats are
+  slide-in by design (reads as "disconnected" to the pathfinder).
+- **Doors-open arithmetic** (projection measured from built leaves): DW door 24.8"
+  into the 40.8" west aisle leaves **16"** — the classic post-remodel discovery,
+  now demonstrable in VR; fridge French door leaves ~18" at the north aisle; oven
+  door leaves ~21". Island drawers leave 30"+. B's galley is wide enough that no
+  open door pinches below ~5'.
 
 ## 8. Remaining Roadmap
 

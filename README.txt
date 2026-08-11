@@ -40,8 +40,9 @@ FINISHES
   Everything of that kind lights up, and picking a colour changes all of
   them at once - change one cabinet pull and every pull follows.
 LAYOUTS
-  Kitchen A / Kitchen B and Family A / Family B are independent - four
-  combinations. Family A has the sectional against the east wall facing the
+  Kitchen A / A' / B and Family A / Family B are independent toggles.
+  Kitchen A' is A with the shallow pantry bay turned into a 42" coffee
+  morning station (the real pantry lives off the family room). Family A has the sectional against the east wall facing the
   85" on the south wall; Family B turns it a quarter clockwise into the
   south-east corner and moves a 65" above the fireplace.
 
