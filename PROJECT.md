@@ -302,6 +302,20 @@ Delivery: **https://jmartz.github.io/kitchen-viewer/** opened in the Quest Brows
   finish, X = recenter, Y = exit.
 - **Exiting must be discoverable** — there is no browser chrome in an immersive session.
   Three routes: the panel's EXIT VR button, left-controller Y, and the system menu.
+- **L16 — an exception in the XR frame loop freezes the headset.** Not a dropped
+  frame, not a console error you can ignore: the session stops being fed frames
+  and the only way out is the Meta button and force-quit. A stale `PANEL_BTNS`
+  reference left behind by the panel rewrite did exactly that the moment a
+  fingertip entered a button. `animate()` now wraps `xrFrame()` in a try/catch and
+  keeps rendering, and `xrTrouble()` puts a rate-limited red notice on the wrist
+  panel — an immersive session has no console and no browser chrome, so the panel
+  is the only place a user can be told anything. The rule: never let one frame's
+  bug cost the session, because EXIT VR has to stay reachable.
+- **L17 — test the path the user takes, not the function it calls.** The freeze
+  above survived a full test pass because I exercised `panelPick()` and
+  `panelCache[i].act()` directly instead of driving the poke branch inside
+  `xrFrame`. The harness now walks every item on every page by moving a synthetic
+  fingertip into each rect and stepping real frames, which is what caught it.
 - **Testing without a headset**: `xrFrame(dt, frame)` takes the frame as an argument and
   reads everything through `renderer.xr.getReferenceSpace()`, so a fake `frame` with
   `getViewerPose`/`getJointPose` drives the entire input path from the console. Note

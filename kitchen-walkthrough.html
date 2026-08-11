@@ -1559,8 +1559,13 @@ function animate(time, frame){
   const dt = Math.min(clock.getDelta(),0.05);
 
   if(xrOn){
-    xrFrame(dt, frame);              // `frame` is how we reach hand joints + viewer pose
-    renderer.render(scene,camera);   // camera pose comes from the headset
+    // An exception in here kills the XR frame loop outright: the headset stops
+    // getting frames and the only way out is the Meta button. Never let one
+    // frame's bug take the session down — log it and keep drawing, so EXIT VR
+    // is still reachable.
+    try{ xrFrame(dt, frame); }        // `frame` reaches hand joints + viewer pose
+    catch(e){ xrTrouble(e); }
+    renderer.render(scene,camera);    // camera pose comes from the headset
     return;
   }
   if(planMode){
@@ -2345,7 +2350,7 @@ function ensurePanel(){
 }
 function drawPanel(){
   if(!panelTex) return;
-  const key=[panelPage,current,finish,pdfFloor,selKind,wallScope,panelHot,finRev].join('|');
+  const key=[panelPage,current,finish,pdfFloor,selKind,wallScope,panelHot,finRev,xrErr].join('|');
   if(key===panelKey) return;            // a canvas upload every frame is not free
   panelKey=key;
   panelCache=panelItems();
@@ -2370,6 +2375,11 @@ function drawPanel(){
                        : 'aim at a surface in the room, then pinch', 14, 60);
   }
 
+  if(xrErr){                            // something threw in the frame loop
+    g.fillStyle='#d0483a'; g.fillRect(8,PC_H-84,PC_W-16,22);
+    g.fillStyle='#fff'; g.font='13px system-ui, sans-serif';
+    g.fillText(('glitch: '+xrErr).slice(0,54), 14, PC_H-68);
+  }
   for(const it of panelCache){
     const hot = (panelHot>=0 && panelCache[panelHot]===it);
     if(it.swatch !== undefined){
@@ -2485,6 +2495,18 @@ function applyFoveation(level){
   return false;
 }
 
+/* Surfaces a frame-loop error where the user can actually see it: the wrist
+   panel, since an immersive session has no console and no browser chrome.
+   Rate-limited, because a broken frame repeats 72 times a second. */
+let xrErr=null, xrErrN=0;
+function xrTrouble(e){
+  xrErrN++;
+  if(xrErr !== String(e && e.message)){
+    xrErr = String(e && e.message);
+    panelKey = '';                       // force the panel to redraw with the notice
+    if(window.console) console.error('[xr frame]', e);
+  }
+}
 function xrFrame(dt, frame){
   if(!foveated) foveated = applyFoveation(0.7);
   if(!readHead(frame)) return;            // no pose yet: do nothing at all
@@ -2556,7 +2578,11 @@ function xrFrame(dt, frame){
     const i = panelPick(t.p);
     if(i !== null && i >= 0){ hotNow = i; break; }
   }
-  if(hotNow >= 0 && pokeArmed){ PANEL_BTNS[hotNow].act(); pokeArmed = false; }
+  if(hotNow >= 0 && pokeArmed){
+    const it = panelCache[hotNow];        // panelCache, not the old flat button list
+    if(it && it.act) it.act();
+    pokeArmed = false;
+  }
   if(hotNow < 0) pokeArmed = true;
   panelHot = hotNow;
   drawPanel();
