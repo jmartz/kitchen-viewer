@@ -37,6 +37,13 @@ FINISHES
   Click "Finishes" in the top-left panel, then click anything in the room.
   Everything of that kind lights up, and picking a colour changes all of
   them at once - change one cabinet pull and every pull follows.
+LAYOUTS
+  Kitchen A / Kitchen B and Family A / Family B are independent - four
+  combinations. Family A has the sectional against the east wall facing the
+  85" on the south wall; Family B turns it a quarter clockwise into the
+  south-east corner and moves a 65" above the fireplace.
+
+FINISHES (cont.)
     Adjustable: cabinets, island, countertops, backsplash, walls,
     appliances, cabinet hardware, faucet, sink bowl, pendants, bench
     cushions, sofa, rug, stools & chairs, trim & doors, window frames,
@@ -61,7 +68,8 @@ IN VR (Meta Quest) - hands or controllers, either works
   You start in the family room looking north into the kitchen.
     PINCH AND HOLD (right hand)     a ray grows, then the gold arc appears;
                                     let go to jump. Short pinch = tap.
-    SHORT PINCH / CLICK             opens fridge, oven, range and pantry doors
+    SHORT PINCH / CLICK             opens things: cabinet doors, drawers, the
+                                    dishwasher, fridge, ovens, range and pantry
     CONTROL PANEL, below eye line   poke it, or point at it and pinch:
                                       A/B  swap option
                                       PLAN  scanned sheet on the floor at 1:1

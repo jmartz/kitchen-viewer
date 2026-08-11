@@ -27,8 +27,12 @@ through the island.
 
 ## Tapping things open
 
-A **short pinch** at a fridge door, a wall-oven door, the range, or the pantry
-doors opens it. Tap again to close. On the desktop viewer it's a plain click.
+A **short pinch** opens whatever you're pointing at: cabinet doors, drawers, the
+dishwasher, the fridge, the wall ovens, the range, the pantry bifolds. Tap again to
+close. On the desktop viewer it's a plain click.
+
+Note the base-cabinet carcasses aren't hollow yet, so an open door shows the
+cabinet face rather than shelves. Drawers do have boxes and read properly.
 
 ## The control panel
 
@@ -39,7 +43,8 @@ never chases you. Press a button either by **poking it with a finger** or by
 
 | Button | Does |
 |---|---|
-| **A / B** | swap Option A ⇄ Option B — the whole point; stand in one spot and flip |
+| **KIT A/B** | swap Kitchen A ⇄ Kitchen B — stand in one spot and flip |
+| **FAM A/B** | swap the family room layout (sofa on the east wall, or turned into the SE corner with the TV over the fireplace) |
 | **PLAN** | drops the scanned S2.2 sheet on the floor at 1:1 underfoot |
 | **FINISH** | opens the finish picker — see below |
 | **EXIT VR** | ends the session and drops you back to the browser |

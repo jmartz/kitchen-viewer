@@ -592,14 +592,51 @@ function shakerRun(x,z,len,alongX,out,mat){
     const st=alongX?box(0.12,2.61,0.09,tm):box(0.09,2.61,0.12,tm);
     place(st, alongX?x+pp:x+out*D, 1.545, alongX?z+out*D:z+pp);
   }
+  const tag=(alongX?'X':'Z')+x.toFixed(2)+','+z.toFixed(2);
   for(let i=0;i<n;i++){
     const pp=(i+0.5)*len/n;
-    const k=new THREE.Mesh(new THREE.SphereGeometry(F(0.05),8,8),M.brass);
-    place(k, alongX?x+pp:x+out*(D+0.04), 1.95, alongX?z+out*(D+0.04):z+pp);
-    const dk=new THREE.Mesh(new THREE.CylinderGeometry(F(0.035),F(0.035),F(0.5),8),M.brass);
-    dk.rotation[alongX?'z':'x']=Math.PI/2;
-    place(dk, alongX?x+pp:x+out*(D+0.03), 2.475, alongX?z+out*(D+0.03):z+pp);
+    const u0=i*len/n+0.06, u1=(i+1)*len/n-0.06;
+    // door: alternate the hinge edge so neighbouring pairs open away from each other
+    const atStart=(i%2===0), hu=atStart?u0:u1;
+    bayDoor(tag+'d'+i, x, z, alongX, out, D, hu, atStart, u1-u0, 0.32, 2.14,
+            mat, alongX?x+pp:x+out*(D+0.04), 1.95, alongX?z+out*(D+0.04):z+pp);
+    bayDrawer(tag+'w'+i, x, z, alongX, out, D, u0, u1-u0, 2.24, 2.71, mat,
+              alongX?x+pp:x+out*(D+0.03), 2.475, alongX?z+out*(D+0.03):z+pp);
   }
+}
+/* One cabinet door. (x,z) is the run's face plane, `hu` the hinge offset along
+   the run, `w` the leaf width, y0..y1 its height. The knob is reparented so it
+   swings with the leaf. */
+function bayDoor(name, x, z, alongX, out, D, hu, atStart, w, y0, y1, mat, kx, ky, kz){
+  const hx = alongX ? x+hu : x+out*D;
+  const hz = alongX ? z+out*D : z+hu;
+  // a leaf running away from its hinge has to swing towards `out`; the sign
+  // flips with the run axis and with which edge the hinge is on
+  const s = atStart ? 1 : -1;
+  const ang = (alongX ? -out*s : out*s) * 1.50;
+  const g = hinge(name, hx, 0, hz, 'y', ang);
+  const cu = hu + s*w/2;
+  const leaf = alongX ? box(w,y1-y0,0.085,mat) : box(0.085,y1-y0,w,mat);
+  toHinge(g, place(leaf, alongX?x+cu:x+out*D, (y0+y1)/2, alongX?z+out*D:z+cu));
+  const k = new THREE.Mesh(new THREE.SphereGeometry(F(0.05),8,8), M.brass);
+  toHinge(g, place(k, kx, ky, kz));
+}
+/* One drawer: the front slides out and drags a shallow box with it. The box
+   lives inside the carcass when shut, so it costs nothing visually until you
+   open it. */
+function bayDrawer(name, x, z, alongX, out, D, u0, w, y0, y1, mat, px, py, pz){
+  const dir = alongX ? new THREE.Vector3(0,0,out) : new THREE.Vector3(out,0,0);
+  const g = hinge(name, x, 0, z, 'slide', F(0.95), dir);
+  const cu = u0 + w/2;
+  const front = alongX ? box(w,y1-y0,0.085,mat) : box(0.085,y1-y0,w,mat);
+  toHinge(g, place(front, alongX?x+cu:x+out*D, (y0+y1)/2, alongX?z+out*D:z+cu));
+  const bd = 1.15, bh = (y1-y0)-0.10;
+  const bxm = alongX ? box(w-0.12,bh,bd,M.cab) : box(bd,bh,w-0.12,M.cab);
+  toHinge(g, place(bxm, alongX?x+cu:x+out*(D-bd/2), (y0+y1)/2-0.03,
+                        alongX?z+out*(D-bd/2):z+cu));
+  const dk = new THREE.Mesh(new THREE.CylinderGeometry(F(0.035),F(0.035),F(0.5),8),M.brass);
+  dk.rotation[alongX?'z':'x']=Math.PI/2;
+  toHinge(g, place(dk, px, py, pz));
 }
 
 /* wall outlet: white plate + rocker */
@@ -648,11 +685,21 @@ function upper(x,z,w,d,face='z+',h=2.6,y0=4.6){
     const u=Math.min(AW-0.06,Math.max(0.06,i*AW/n));
     P(u, y0+h/2, 0.12, h-0.44, 0.09, tm);            // stiles
   }
+  const utag='U'+x.toFixed(2)+','+z.toFixed(2);
   for(let i=0;i<n;i++){                              // knobs, low on each door
     const u=(i+0.5)*AW/n + (i<n/2?1:-1)*(AW/n/2-0.18);
+    const bu0=i*AW/n+0.06, bu1=(i+1)*AW/n-0.06;
+    const atStart=(i%2===0), hu=atStart?bu0:bu1, s=atStart?1:-1;
+    const ang=(fx ? fx*s : -fz*s)*1.45;
+    const hx = fx ? fpx+fx*D : x+hu, hz = fx ? z+hu : fpz+fz*D;
+    const g = hinge(utag+i, hx, 0, hz, 'y', ang);
+    const cu = hu + s*(bu1-bu0)/2;
+    const leaf = fx ? box(0.08,h-0.16,bu1-bu0,M.cab) : box(bu1-bu0,h-0.16,0.08,M.cab);
+    toHinge(g, place(leaf, fx?fpx+fx*(D-0.005):x+cu, y0+h/2,
+                           fx?z+cu:fpz+fz*(D-0.005)));
     const k=new THREE.Mesh(new THREE.SphereGeometry(F(0.05),10,10),M.brass);
-    if(fx) place(k, fpx+fx*(D+0.05), y0+0.46, z+u);
-    else   place(k, x+u, y0+0.46, fpz+fz*(D+0.05));
+    toHinge(g, fx ? place(k, fpx+fx*(D+0.05), y0+0.46, z+u)
+                  : place(k, x+u, y0+0.46, fpz+fz*(D+0.05)));
   }
 }
 function tallCab(x,z,w,d,h=7.2){ place(box(w,h,d,M.cab), x+w/2,h/2,z+d/2); solid(x,z,w,d); }
@@ -816,12 +863,15 @@ function dishwasher(x,z,w=2,alongX=true,out=1){
   put(w/2, (H+0.12)/2, w, H+0.12, 0.05, M.applDk, -0.03);      // reveal behind the door
   put(w/2, TOE/2, w-0.05, TOE, 0.07, M.applDk, 0);             // toe recess
   const dh=H-TOE-CTL-0.05;
-  put(w/2, TOE+0.03+dh/2, w-0.05, dh, DT, steelFace(w,dh), 0.02);
-  put(w/2, H-CTL/2, w-0.05, CTL, DT*0.85, M.applGl, 0.02);     // control ledge
+  // the door is bottom-hinged like an oven; axis follows the run direction
+  const g=hinge('dw'+x.toFixed(2)+','+z.toFixed(2), x, TOE, z,
+                alongX?'x':'z', alongX ? 1.45*out : -1.45*out);
+  toHinge(g, put(w/2, TOE+0.03+dh/2, w-0.05, dh, DT, steelFace(w,dh), 0.02));
+  toHinge(g, put(w/2, H-CTL/2, w-0.05, CTL, DT*0.85, M.applGl, 0.02));  // control ledge
   const bar=new THREE.Mesh(new THREE.CylinderGeometry(F(0.045),F(0.045),F(w-0.35),14),M.appl);
   bar.rotation[alongX?'z':'x']=Math.PI/2;
-  if(alongX) place(bar, x+w/2, H-CTL-0.10, z+out*(DT+0.12));
-  else       place(bar, x+out*(DT+0.12), H-CTL-0.10, z+w/2);
+  toHinge(g, alongX ? place(bar, x+w/2, H-CTL-0.10, z+out*(DT+0.12))
+                    : place(bar, x+out*(DT+0.12), H-CTL-0.10, z+w/2));
 }
 function stool(x,z,alongX=true){ // backless wood saddle stool
   if(alongX){
@@ -1803,7 +1853,9 @@ function buildFamily(){
     // square exactly where it is and only swings the L round inside it.
     const x0 = EAST - L, z0 = SOUTHI - L;
     withYaw(1, x0 + L/2, z0 + L/2, ()=> sectional(x0, z0, L, D, M.sofa));
-    tv(6.64, 23.97, 4.50, 65, false, 1);            // 65" on the chimney face
+    // The firebox opening tops out at y=4.40, so a 65" centred at 4.50 cut
+    // straight through it. Bottom of the screen now clears it by ~6".
+    tv(6.64, 23.97, 6.30, 65, false, 1);            // 65" on the chimney face
     famRug(12.2, 26.6, 7, 8);
   } else {
     sectional(EAST - L, 22.0, L, D, M.sofa);
