@@ -29,7 +29,8 @@ SWAPPING IN REAL PHOTO TEXTURES
   a small note in the bottom-right corner.
 
 CONTROLS
-  Drag to look - WASD/arrows to move - Shift runs - panel top-left for
+  Drag to look - WASD/arrows to move - Shift runs - mouse wheel walks
+  forward/back (one-handed: drag to steer, scroll to go) - panel top-left for
   Option A/B, views (Walk / 3D top / 2D plan), island finish, plan-floor
   and X-ray overlays.
 

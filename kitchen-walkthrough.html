@@ -935,7 +935,11 @@ function stoolRaw(x,z,alongX=true){ // backless wood saddle stool
     solid(x-0.5,z-0.8,1.0,1.6);
   }
 }
-function chair(x,z,facing){ return asMovable(x,z,()=>chairRaw(x,z,facing)); }
+function chair(x,z,facing,rotQ){
+  const g = asMovable(x,z,()=>chairRaw(x,z,facing));
+  if(rotQ) g.rotation.y = rotQ*Math.PI/2;   // square footprint, so the solid holds
+  return g;
+}
 function chairRaw(x,z,facing){ // dining chair, facing ±x
   place(box(1.3,0.14,1.3,M.wood), x,1.5,z);
   for(const l of [[-0.5,-0.5],[0.5,-0.5],[-0.5,0.5],[0.5,0.5]])
@@ -2039,14 +2043,20 @@ function buildFamily(){
     tv(6.64, 23.97, 6.30, 65, false, 1);            // 65" on the chimney face
     famRug(12.2, 26.6, 7, 8);
     if(famOpt === 'B2'){
-      // B-prime: a kitchen table in the open ground between kitchen and family
-      const tx=13.9, tz=14.2;
-      place(box(4.0,0.16,2.3,matFit(M.wood,4,2.3,1.6)), tx, 2.48, tz);
-      for(const [lx,lz] of [[-1.7,-0.85],[1.7,-0.85],[-1.7,0.85],[1.7,0.85]])
-        place(box(0.18,2.4,0.18,M.woodDk), tx+lx, 1.2, tz+lz);
-      solid(tx-2.0, tz-1.15, 4.0, 2.3);
-      chair(tx-2.75, tz-0.55, 1); chair(tx-2.75, tz+0.55, 1);
-      chair(tx+2.75, tz-0.55, -1); chair(tx+2.75, tz+0.55, -1);
+      // B-prime: 48" round pedestal table for four, kept to the family-room
+      // side so the run from the kitchen/dining passage to the NW deck doors
+      // stays clear. Verified with the walkability pathfinder.
+      const tx=14.5, tz=19.6, TR=2.0;
+      const tt=new THREE.Mesh(new THREE.CylinderGeometry(F(TR),F(TR),F(0.15),36),
+                              matFit(M.wood,TR*2,TR*2,1.6));
+      place(tt, tx, 2.5, tz);
+      place(new THREE.Mesh(new THREE.CylinderGeometry(F(0.22),F(0.30),F(2.35),16),M.woodDk),
+            tx, 1.25, tz);
+      place(new THREE.Mesh(new THREE.CylinderGeometry(F(1.05),F(1.05),F(0.12),24),M.woodDk),
+            tx, 0.08, tz);
+      solid(tx-TR+0.3, tz-TR+0.3, 2*(TR-0.3), 2*(TR-0.3));
+      chair(tx-2.35, tz, 1);        chair(tx+2.35, tz, -1);
+      chair(tx, tz-2.35, 1, -1);    chair(tx, tz+2.35, 1, 1);
     }
   } else {
     sectional(EAST - L, 22.0, L, D, M.sofa);
@@ -2492,6 +2502,21 @@ function finDesktopEvents(){
     if(moved > 5) return;                       // that was a drag-look, not a click
     screenTap(e.clientX, e.clientY);
   });
+  // one-handed browsing: drag to look, wheel to walk. Forward is where you face.
+  cv.addEventListener('wheel', e=>{
+    if(overhead || planMode || xrOn) return;
+    e.preventDefault();
+    // substepped through collide(), or a hard flick tunnels straight through
+    // a counter (one notch of deltaY 300 is a 0.84 m leap)
+    let d = -e.deltaY * 0.0012;
+    const step = 0.09 * Math.sign(d);
+    while(Math.abs(d) > 1e-4){
+      const s = Math.abs(d) > 0.09 ? step : d;
+      const [nx,nz] = collide(pos.x - Math.sin(yaw)*s, pos.z - Math.cos(yaw)*s);
+      pos.x = nx; pos.z = nz;
+      d -= s;
+    }
+  }, {passive:false});
 
   const on = (id, fn) => { const b = document.getElementById(id); if(b) b.onclick = fn; };
   on('btnFinish', ()=>setPickMode(!pickMode));
