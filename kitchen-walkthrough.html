@@ -201,6 +201,12 @@ function makeMaterials(){
   M.faucet = new THREE.MeshPhongMaterial({color:0xb08d46,shininess:85});
   M.lamp   = new THREE.MeshPhongMaterial({color:0x6b6f63,shininess:40});
   M.rug    = new THREE.MeshLambertMaterial({color:0x9c8a74});
+  // Interior liners. Deliberately NOT in the convertPBR spec: they stay Lambert
+  // so their emissive terms read as built-in lighting without real lights.
+  M.cabIn  = new THREE.MeshLambertMaterial({color:0xe9e5dc});
+  M.applIn = new THREE.MeshLambertMaterial({color:0xf3f6f8, emissive:0x40464c});
+  M.ovenIn = new THREE.MeshLambertMaterial({color:0x232528, emissive:0x2c1e0c});
+  M.coke   = new THREE.MeshPhongMaterial({color:0xc8102e, shininess:80});
   M.wood   = new THREE.MeshLambertMaterial({color:0xb08d5e});
   M.woodDk = new THREE.MeshLambertMaterial({color:0x7d6140});
   M.cushion= new THREE.MeshLambertMaterial({color:0xb9a98d});
@@ -516,7 +522,8 @@ function matFit(base,wFt,hFt,tileFt){
 
 /* ---------- small builders (all args in feet) ---------- */
 let world, solids, lights;   // world group, collision boxes, decorative lights
-let movables = [];           // grabbable furniture (stools, chairs)
+let movables = [];           // grabbable furniture (stools, chairs, the Coke)
+let fridgeLights = [];       // {mat, doors, t, on} — lit on a comic delay
 
 function box(w,h,d, mat){
   const m = new THREE.Mesh(new THREE.BoxGeometry(F(w),F(h),F(d)), mat);
@@ -656,8 +663,31 @@ function outlet(x,z,y,alongX){
 /* base cabinet run + countertop */
 /* base run + slab. `cut` = {x,z,w,d} world-ft sink opening; the slab is then
    built as four strips around it instead of one solid piece. */
-function counter(x,z,w,d,mat=M.cab,cut){
-  place(box(w,BASE_H,d,mat), x+w/2, BASE_H/2, z+d/2);
+/* open-front carcass shell: bottom mass, top stretcher, back + ends, interior
+   floor and one long shelf. The shaker face frame and its doors fully cover the
+   opening when closed, so closed looks identical to the old solid box — but an
+   open door now shows real cabinet inside. `front` names the open face. */
+function baseShell(x,z,w,d,mat,front){
+  const fx = front==='x+'?1:front==='x-'?-1:0;
+  const fz = front==='z+'?1:front==='z-'?-1:0;
+  place(box(w,0.34,d,mat), x+w/2,0.17, z+d/2);                       // toe mass
+  place(box(w-0.10,0.07,d-0.10,M.cabIn), x+w/2,0.375, z+d/2);       // interior floor
+  place(box(w,0.30,d,mat), x+w/2, BASE_H-0.15, z+d/2);              // top stretcher
+  if(fx){
+    place(box(0.10,BASE_H,d,mat), x+w/2 - fx*(w/2-0.05), BASE_H/2, z+d/2);  // back
+    place(box(w,BASE_H,0.10,mat), x+w/2, BASE_H/2, z+0.05);                 // ends
+    place(box(w,BASE_H,0.10,mat), x+w/2, BASE_H/2, z+d-0.05);
+    place(box(w-0.55,0.06,d-0.24,M.cabIn), x+w/2 - fx*0.20, 1.30, z+d/2);   // shelf
+  } else {
+    place(box(w,BASE_H,0.10,mat), x+w/2, BASE_H/2, z+d/2 - fz*(d/2-0.05));
+    place(box(0.10,BASE_H,d,mat), x+0.05, BASE_H/2, z+d/2);
+    place(box(0.10,BASE_H,d,mat), x+w-0.05, BASE_H/2, z+d/2);
+    place(box(w-0.24,0.06,d-0.55,M.cabIn), x+w/2, 1.30, z+d/2 - fz*0.20);
+  }
+}
+function counter(x,z,w,d,mat=M.cab,cut,front){
+  if(front) baseShell(x,z,w,d,mat,front);
+  else place(box(w,BASE_H,d,mat), x+w/2, BASE_H/2, z+d/2);
   const TX=x-0.075, TZ=z-0.075, TW=w+0.15, TD=d+0.15, TY=CT_H-CT_T/2;
   const slab=(sx,sz,sw,sd)=>{
     if(sw<=0.002||sd<=0.002) return;
@@ -676,7 +706,23 @@ function counter(x,z,w,d,mat=M.cab,cut){
 /* wall cabinet with shaker fronts + knobs, matching the bases. `face` is the
    side the doors are on: 'z+' 'z-' 'x+' 'x-'. */
 function upper(x,z,w,d,face='z+',h=2.6,y0=4.6){
-  place(box(w,h,d,M.cab), x+w/2, y0+h/2, z+d/2);
+  {  // open-front shell + one shelf; doors cover the opening when closed
+    const sfx = face==='x+'?1:face==='x-'?-1:0;
+    const sfz = face==='z+'?1:face==='z-'?-1:0;
+    place(box(w,0.09,d,M.cab), x+w/2, y0+0.045, z+d/2);
+    place(box(w,0.09,d,M.cab), x+w/2, y0+h-0.045, z+d/2);
+    if(sfx){
+      place(box(0.09,h,d,M.cab), x+w/2 - sfx*(w/2-0.045), y0+h/2, z+d/2);
+      place(box(w,h,0.09,M.cab), x+w/2, y0+h/2, z+0.045);
+      place(box(w,h,0.09,M.cab), x+w/2, y0+h/2, z+d-0.045);
+      place(box(w-0.3,0.05,d-0.16,M.cabIn), x+w/2 - sfx*0.10, y0+h/2, z+d/2);
+    } else {
+      place(box(w,h,0.09,M.cab), x+w/2, y0+h/2, z+d/2 - sfz*(d/2-0.045));
+      place(box(0.09,h,d,M.cab), x+0.045, y0+h/2, z+d/2);
+      place(box(0.09,h,d,M.cab), x+w-0.045, y0+h/2, z+d/2);
+      place(box(w-0.16,0.05,d-0.3,M.cabIn), x+w/2, y0+h/2, z+d/2 - sfz*0.10);
+    }
+  }
   const fx = face==='x+'?1:face==='x-'?-1:0;
   const fz = face==='z+'?1:face==='z-'?-1:0;
   const AW = fx ? d : w, D=0.065, tm=M.trimDk;
@@ -754,10 +800,51 @@ function fridge(x,z,w=3,d=2.4,faceW=false){
   // suffixed with the footprint so Option A and Option B fridges don't share
   // open/closed state.
   const tag='@'+x.toFixed(1)+','+z.toFixed(1);
+  // interior: dark shell, bright liner + glass shelves + crisper up top,
+  // freezer cavity below. The old carcass was one solid box.
+  const IND = faceW ? w-DT : d-DT;              // shell depth
+  const divY = TOE+GAP+1.66+GAP;
+  const sh=(bw,bh,bd,mat,cx,cy,cz)=>place(faceW?box(bd,bh,bw,mat):box(bw,bh,bd,mat),
+    faceW?x+DT+cz:cx, cy, faceW?z+cx-x:z+cz).castShadow=false;
+  // outer shell (panels)
+  sh(AW,0.10,IND,M.applDk, x+AW/2,0.06,IND/2);
+  sh(AW,0.10,IND,M.applDk, x+AW/2,H-0.05,IND/2);
+  sh(0.10,H,IND,M.applDk, x+0.05,H/2,IND/2);
+  sh(0.10,H,IND,M.applDk, x+AW-0.05,H/2,IND/2);
+  sh(AW,H,0.10,M.applDk, x+AW/2,H/2,0.05);
+  sh(AW,0.14,IND,M.applDk, x+AW/2,divY,IND/2);                      // divider
+  // fresh-food liner + light panel + shelves + crisper
+  sh(AW-0.26,0.05,IND-0.34,M.applIn, x+AW/2,divY+0.10,IND/2+0.10);
+  const fLmat=new THREE.MeshLambertMaterial({color:0x30343a});   // off until opened
+  sh(AW-0.26,0.06,IND-0.34,fLmat, x+AW/2,H-0.13,IND/2+0.10);
+  fridgeLights.push({mat:fLmat, doors:['frL'+tag,'frR'+tag], t:0, on:false});
+  sh(0.06,H-divY-0.3,IND-0.3,M.applIn, x+0.16,(divY+H)/2,IND/2+0.10);
+  sh(0.06,H-divY-0.3,IND-0.3,M.applIn, x+AW-0.16,(divY+H)/2,IND/2+0.10);
+  sh(AW-0.26,H-divY-0.3,0.06,M.applIn, x+AW/2,(divY+H)/2,0.14);
+  for(const sy of [3.15,4.05,4.90])
+    sh(AW-0.34,0.045,IND-0.5,M.glass, x+AW/2,sy,IND/2+0.14);
+  sh(AW-0.40,0.55,IND-0.55,M.applIn, x+AW/2,2.45,IND/2+0.14);       // crisper
+  // one cold Coke on the middle shelf, grabbable
+  {
+    const cu=x+AW/2-0.55, cv2=IND/2+0.15;
+    const canX = faceW ? x+DT+cv2 : cu;
+    const canZ = faceW ? z+(cu-x) : z+cv2;
+    cokeCan(canX, canZ, 4.09);
+  }
+  // freezer cavity liner (dark)
+  sh(AW-0.26,0.05,IND-0.34,M.applDk, x+AW/2,TOE+0.10,IND/2+0.10);
   const fh=1.66, fy=TOE+GAP+fh/2;                                    // freezer drawer
-  const gF=hinge('fz'+tag, x, 0, z, 'slide', F(1.25),
+  const gF=hinge('fz'+tag, x, 0, z, 'slide', F(1.55),
                  faceW ? new THREE.Vector3(-1,0,0) : new THREE.Vector3(0,0,1));
   toHinge(gF, put(AW/2, fy, AW-2*SIDE, fh, DT, steelFace(AW,fh)));
+  // a real basket rides the front: bottom + three walls, wire-white
+  {
+    const bw=AW-0.5, bd=IND-0.6, bwl=0.06;
+    const bput=(uw,yy,hh,dep,off)=>toHinge(gF, put(AW/2, yy, uw, hh, dep, M.applIn, -off));
+    bput(bw, TOE+GAP+0.10, 0.06, bd, 0.25);                         // basket floor
+    bput(bwl, fy, fh-0.35, bd, 0.25);                               // this pair reads
+    bput(bw, fy, fh-0.35, bwl, 0.25+bd-bwl);                        // as back + side
+  }
   const dy0=TOE+GAP+fh+GAP, dh=H-dy0-SIDE, dy=dy0+dh/2;              // French doors
   const dw=(AW-2*SIDE-GAP)/2;
   const hLx = faceW ? x : x+SIDE,        hLz = faceW ? z+SIDE      : z+d;
@@ -799,6 +886,17 @@ function ovenTower(x,z,w,alongX=true,out=1){
     return alongX ? place(m, x+u, y, z+out*(off+dep/2))
                   : place(m, x+out*(off+dep/2), y, z+u);
   };
+  // enclosure replaces the solid tall cab: sides, top, back, front fillers
+  const EX=x-0.125, EW=w+0.25, EB=2.3;
+  const enc=(bw,bh,bd,cx,cy,cz)=>place(alongX?box(bw,bh,bd,M.cab):box(bd,bh,bw,M.cab),
+    alongX?cx:x+out*(cz-z), cy, alongX?cz:z+(cx-EX));
+  enc(0.10,7.2,EB, EX+0.05,3.6, z-out*EB/2);
+  enc(0.10,7.2,EB, EX+EW-0.05,3.6, z-out*EB/2);
+  enc(EW,0.15,EB, EX+EW/2,7.12, z-out*EB/2);
+  enc(EW,0.20,EB, EX+EW/2,0.10, z-out*EB/2);
+  enc(EW,7.2,0.10, EX+EW/2,3.6, z-out*(EB-0.05));
+  put(w/2, 1.27, w+0.25, 2.06, 0.06, M.cab, -0.02);              // filler below
+  put(w/2, 6.45, w+0.25, 1.55, 0.06, M.cab, -0.02);              // filler above
   put(w/2, 4.05, w+0.08, 3.65, 0.05, M.applDk, -0.04);          // surround
   const doors=[{n:'ovT',y0:2.30,y1:4.25,glass:0.72},            // oven
                {n:'mwT',y0:4.33,y1:5.48,glass:0.55}];           // micro/convection
@@ -812,6 +910,16 @@ function ovenTower(x,z,w,alongX=true,out=1){
     bar.rotation[alongX?'z':'x']=Math.PI/2;
     setDoorHandle(g, toHinge(g, alongX ? place(bar, x+w/2, dd.y1-0.38, z+out*(DT+0.13))
                       : place(bar, x+out*(DT+0.13), dd.y1-0.38, z+w/2)));
+    // the cavity behind the door: dark liner, two racks, a warm glow
+    const cd2=1.75, ch=dd.y1-dd.y0-0.14, cy=(dd.y0+dd.y1)/2;
+    put(w/2, cy, w-0.20, ch, 0.06, M.ovenIn, -cd2);                    // back
+    put(w/2, dd.y0+0.05, w-0.20, 0.08, cd2, M.ovenIn, -cd2);          // floor
+    put(w/2, dd.y1-0.09, w-0.20, 0.08, cd2, M.ovenIn, -cd2);          // top
+    put(0.12+ (w-0.24)/2*0-0+0.10, cy, 0.06, ch, cd2, M.ovenIn, -cd2);
+    put(w-0.10, cy, 0.06, ch, cd2, M.ovenIn, -cd2);
+    for(const ry of [dd.y0+ch*0.35, dd.y0+ch*0.62])
+      put(w/2, ry, w-0.28, 0.035, cd2-0.2, M.black, -cd2+0.1).castShadow=false;
+    put(w/2, dd.y1-0.20, 0.30, 0.06, 0.05, M.lightE, -cd2+0.05).castShadow=false;
   }
   put(w/2, 5.78, w-0.2, 0.34, 0.03, M.applGl, DT-0.02);         // control panel
 }
@@ -895,7 +1003,11 @@ function dishwasher(x,z,w=2,alongX=true,out=1){
     return alongX ? place(m, x+u, y, z+out*(off+dep/2))
                   : place(m, x+out*(off+dep/2), y, z+u);
   };
-  put(w/2, (H+0.12)/2, w, H+0.12, 0.05, M.applDk, -0.03);      // reveal behind the door
+  put(w/2, (H+0.12)/2, w, H+0.12, 0.05, M.applDk, -1.55);      // tub back
+  put(w/2, 0.30, w-0.16, 0.06, 1.5, M.applDk, -1.52);          // tub floor
+  put(w/2, H-0.06, w-0.16, 0.06, 1.5, M.applDk, -1.52);
+  put(w/2, 0.75, w-0.30, 0.5, 1.2, M.applIn, -1.40);           // lower basket
+  put(w/2, 1.55, w-0.30, 0.4, 1.2, M.applIn, -1.40);           // upper basket
   put(w/2, TOE/2, w-0.05, TOE, 0.07, M.applDk, 0);             // toe recess
   const dh=H-TOE-CTL-0.05;
   // the door is bottom-hinged like an oven; axis follows the run direction
@@ -922,6 +1034,19 @@ function asMovable(cx, cz, fn){
   return g;
 }
 function stool(x,z,alongX=true){ return asMovable(x,z,()=>stoolRaw(x,z,alongX)); }
+/* a cold one. Grabbable in all three axes; set it down on any surface and it
+   lands on it (release raycasts straight down). */
+function cokeCan(cx,cz,yBase){
+  const g = asMovable(cx,cz,()=>{
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(F(0.108),F(0.108),F(0.40),18),M.coke);
+    place(body,cx,yBase+0.20,cz);
+    const top=new THREE.Mesh(new THREE.CylinderGeometry(F(0.100),F(0.108),F(0.025),18),M.steel);
+    place(top,cx,yBase+0.4125,cz).castShadow=false;
+  });
+  g.userData.mov.freeY = true;
+  g.userData.mov.baseY = F(yBase);
+  return g;
+}
 function stoolRaw(x,z,alongX=true){ // backless wood saddle stool
   if(alongX){
     place(box(1.5,0.16,0.85,matFit(M.wood,1.5,0.85,2.4)), x,2.05,z);
@@ -1332,7 +1457,7 @@ function buildOptionA(variant){
   wallSeg(0,-WALL_T/2, ZONE_W, true, [{o:17.0,w:3.0,sill:3.0,head:7.0,shade:true}]);
   // north run: counter with cooktop, then 2' oven cabinet at the end of the
   // 10'-5" segment, REF in the 3'-2" bay, shallow pantry in the 3'-0" bay
-  counter(0.25,0.25, 7.42, 2.08);
+  counter(0.25,0.25, 7.42, 2.08, M.cab, null, 'z+');
   shakerRun(0.25,2.33, 7.42, true, 1);
   cooktop(4.6,0.35);
   upper(0.25,0.15, 3.6, 1.15);
@@ -1347,8 +1472,8 @@ function buildOptionA(variant){
   // Oven tower, widened bay: the drawn 2'-0" cab only fits a 24" oven, which
   // is why the old double stack read small. Bay is now 2'-9" (stolen from the
   // counter run) holding a 30" oven with a 30" microwave/convection above.
-  tallCab(7.67,0.25, 2.75, 2.3);
-  ovenTower(7.795,2.55, 2.5, true, 1);
+  ovenTower(7.795,2.55, 2.5, true, 1);   // builds its own hollow enclosure
+  solid(7.67,0.25, 2.75, 2.3);
   // fridge in the 3'-2" bay
   fridge(10.55,0.25, 3.0, 2.4);
   if(variant === 'morning') morningStation(13.58, 0.25, 3.0, 1.35);
@@ -1366,7 +1491,7 @@ function buildOptionA(variant){
   // Sink centres on the 6' sliding window (z 3..9); DW sits just north of it,
   // and the shaker face frame breaks around the DW bay instead of drawing over it.
   const SKA={x:0.55,z:4.75,w:1.5,d:2.5};              // sink cutout (front-to-back x)
-  counter(0.25,2.33, 2.08, 9.6, M.cab, SKA);
+  counter(0.25,2.33, 2.08, 9.6, M.cab, SKA, 'x+');
   shakerRun(2.33,2.33, 0.30, false, 1);               // corner filler
   shakerRun(2.33,4.63, 7.30, false, 1);               // sink base + run south
   dishwasher(2.33,2.63, 2.0, false, 1);
@@ -1381,7 +1506,17 @@ function buildOptionA(variant){
   // holds the plan's 42" aisle; the shave comes off the west end (west aisle
   // 40.8"->42.6") and the east end (nook gap +3"), depth off the seating side.
   const ix=5.98, iz=5.83;
-  place(box(7.35,BASE_H,1.93,matFit(IB,7.35,BASE_H,3.2)), ix+3.875,BASE_H/2, iz+1.035);
+  {  // hollow island: bottom, top stretcher, ends, centre spine; doors both sides
+    const iw=7.35, idp=1.93, icx=ix+3.875;
+    place(box(iw,0.34,idp,IB), icx,0.17, iz+1.035);
+    place(box(iw-0.10,0.07,idp-0.10,M.cabIn), icx,0.375, iz+1.035);
+    place(box(iw,0.30,idp,IB), icx, BASE_H-0.15, iz+1.035);
+    place(box(0.10,BASE_H,idp,IB), ix+0.05, BASE_H/2, iz+1.035);
+    place(box(0.10,BASE_H,idp,IB), ix+7.30, BASE_H/2, iz+1.035);
+    place(box(iw,BASE_H,0.12,IB), icx, BASE_H/2, iz+1.035);          // spine
+    place(box(iw-0.24,0.06,0.72,M.cabIn), icx, 1.30, iz+0.55);       // shelves
+    place(box(iw-0.24,0.06,0.72,M.cabIn), icx, 1.30, iz+1.52);
+  }
   shakerRun(ix+0.2,iz+0.07, 7.35, true, -1, IB);         // working-side doors
   shakerRun(ix+0.2,iz+2.00, 7.35, true, 1, IB);          // back panel detail
   shakerRun(ix+0.2,iz+0.07, 1.93, false, -1, IB);        // west end
@@ -1431,7 +1566,7 @@ function buildOptionB(){
   pendant(px+1.5,2.2); pendant(px+1.5,6.2);
   // north counter east of peninsula: D/W + sink centred under the 3' window (x 13..16)
   const SKB={x:13.25,z:0.55,w:2.5,d:1.5};
-  counter(10.6,0.25, ZONE_W-10.6-0.25, 2.08, M.cab, SKB);
+  counter(10.6,0.25, ZONE_W-10.6-0.25, 2.08, M.cab, SKB, 'z+');
   shakerRun(10.6,2.33, 0.30, true, 1);                   // filler at the peninsula
   shakerRun(12.9,2.33, ZONE_W-0.25-12.9, true, 1);       // sink base + run east
   dishwasher(10.9,2.33, 2.0, true, 1);
@@ -1442,11 +1577,15 @@ function buildOptionB(){
   upper(19.93,2.55, 1.15,1.30, 'x-');
   upper(19.93,6.05, 1.15,2.50, 'x-');
   // east counter along dining wall: range + fridge at south end
-  counter(ZONE_W-2.08,2.55, 2.08, 6.0);
+  counter(ZONE_W-2.08,2.55, 2.08, 6.0, M.cab, null, 'x-');
   shakerRun(ZONE_W-2.08,2.55, 1.15, false, -1);
   shakerRun(ZONE_W-2.08,6.2, 2.35, false, -1);
   cooktop(ZONE_W-2.0,4.0, 1.9, 1.9);
   // slide-in range: oven below the cooktop, face flush with the cabinet front
+  place(box(1.35,2.2,1.9,M.ovenIn), ZONE_W-1.35, 1.45, 4.95);           // cavity
+  for(const ry of [1.15,1.85])
+    place(box(1.2,0.035,1.7,M.black), ZONE_W-1.4, ry, 4.95).castShadow=false;
+  place(box(0.06,0.06,0.4,M.lightE), ZONE_W-1.95, 2.3, 4.95).castShadow=false;
   const gRange=hinge('range', ZONE_W-2.145, 0.10, 4.95, 'z', 1.45);
   toHinge(gRange, place(box(0.13,BASE_H,2.5,steelFace(2.5,BASE_H)), ZONE_W-2.145, BASE_H/2, 4.95));
   toHinge(gRange, place(box(0.04,1.30,2.02,M.applGl), ZONE_W-2.23, 1.30, 4.95));  // oven door glass
@@ -1567,7 +1706,7 @@ function init(){
 }
 function buildOption(key){
   if(world){ scene.remove(world); disposeWorld(world); }
-  world = new THREE.Group(); solids = []; openables = []; movables = [];
+  world = new THREE.Group(); solids = []; openables = []; movables = []; fridgeLights = [];
   buildShared(key); OPTS[key].build();
   scene.add(world);
   applyFinishes();          // colours survive an A/B or finish rebuild
@@ -1911,6 +2050,19 @@ function applyDoor(g){
   else g.rotation[d.axis] = d.open*e;
 }
 function updateOpenables(dt){
+  for(const fl of fridgeLights){
+    const open = Math.max(DOORS[fl.doors[0]]||0, DOORS[fl.doors[1]]||0) > 0.18;
+    if(open){
+      fl.t += dt;
+      if(!fl.on && fl.t > 0.6){       // the beat before the light finds you
+        fl.on = true;
+        fl.mat.color.setHex(0xfff6dd); fl.mat.emissive.setHex(0xd9c79a);
+      }
+    } else if(fl.on || fl.t){
+      fl.on=false; fl.t=0;
+      fl.mat.color.setHex(0x30343a); fl.mat.emissive.setHex(0x000000);
+    }
+  }
   for(const g of openables){
     const d = g.userData.door;
     if(d.held) continue;                    // a hand owns it right now
@@ -1994,7 +2146,10 @@ function morningStation(x0, z0, w, d){
   place(box(0.10,H,d,M.cab), x1-0.05, H/2, z0+d/2);
   place(box(w-0.20,H,0.10,M.cab), x0+w/2, H/2, z0+0.05);    // back
   place(box(w,0.15,d,M.cab), x0+w/2, H-0.075, z0+d/2);      // top
-  place(box(w-0.20,CTY-0.18,d-0.25,M.cab), x0+w/2,(CTY-0.18)/2, z0+(d-0.25)/2); // base
+  place(box(w-0.20,0.32,d-0.25,M.cab), x0+w/2,0.16, z0+(d-0.25)/2);       // toe
+  place(box(w-0.28,0.06,d-0.35,M.cabIn), x0+w/2,0.35, z0+(d-0.25)/2);     // floor
+  place(box(w-0.20,0.26,d-0.25,M.cab), x0+w/2, CTY-0.31, z0+(d-0.25)/2);  // stretcher
+  place(box(w-0.28,0.05,d-0.45,M.cabIn), x0+w/2, 1.7, z0+(d-0.30)/2);     // shelf
   place(box(w,0.13,d-0.05,matFit(M.top,w,d,6)), x0+w/2, CTY-0.065, z0+(d-0.05)/2);
   place(box(w-0.20,1.15,0.07,matFit(M.tile,w,1.15,2)), x0+w/2, CTY+0.575, z0+0.14)
     .castShadow=false;                                       // splash
@@ -3287,7 +3442,8 @@ function endDoorGrab(){
 }
 function startMovGrab(c, g){
   grabMov=g; grabCtrl=c;
-  movOff.copy(g.position).sub(grabPoint(c)); movOff.y=0;
+  movOff.copy(g.position).sub(grabPoint(c));
+  if(!g.userData.mov.freeY) movOff.y=0;
 }
 function updateMovGrab(){
   if(!grabMov) return;
@@ -3295,12 +3451,27 @@ function updateMovGrab(){
   const nx=p.x+movOff.x, nz=p.z+movOff.z;
   const dx=nx-grabMov.position.x, dz=nz-grabMov.position.z;
   grabMov.position.x=nx; grabMov.position.z=nz;
+  if(grabMov.userData.mov.freeY)
+    grabMov.position.y=Math.max(F(0.02)-grabMov.userData.mov.baseY, p.y+movOff.y);
   for(const i of grabMov.userData.mov.sIdx){
     const b=solids[i]; if(!b) continue;
     b.x1+=dx; b.x2+=dx; b.z1+=dz; b.z2+=dz;
   }
 }
-function endMovGrab(){ grabMov=null; grabCtrl=null; }
+function endMovGrab(){
+  if(grabMov && grabMov.userData.mov.freeY){
+    // let go: the can settles onto whatever is under it
+    world.updateMatrixWorld(true);
+    const mv=grabMov.userData.mov;
+    _fray.set(_tw2.set(grabMov.position.x, grabMov.position.y+mv.baseY+0.05, grabMov.position.z),
+              new THREE.Vector3(0,-1,0));
+    _fray.far=6;
+    const hit=_fray.intersectObject(world,true)
+      .filter(h=>h.object.parent!==grabMov && !grabMov.children.includes(h.object))[0];
+    if(hit) grabMov.position.y = hit.point.y - mv.baseY + 0.005;
+  }
+  grabMov=null; grabCtrl=null;
+}
 
 /* ---- body avatar: a 200 lb frame under the headset so you can look down
    and judge an aisle. Height comes from the real head height every frame. */
