@@ -1008,14 +1008,16 @@ function sink(x,z,w=2.4,d=1.5,spout='z+'){
 /* dishwasher front, proud of the cabinet face. (x,z) is the face plane, `out`
    the direction it faces. Callers must break the shakerRun around this bay. */
 function dishwasher(x,z,w=2,alongX=true,out=1){
-  const H=2.34, DT=0.13, TOE=0.24, CTL=0.19;
+  // H reaches the underside of the slab (2.87) less a small reveal — the old
+  // 2.34 left five inches of exposed tub above the door
+  const H=2.80, DT=0.13, TOE=0.24, CTL=0.19;
   const put=(u,y,uw,h,dep,mat,off)=>{
     off=off||0;
     const m = alongX ? box(uw,h,dep,mat) : box(dep,h,uw,mat);
     return alongX ? place(m, x+u, y, z+out*(off+dep/2))
                   : place(m, x+out*(off+dep/2), y, z+u);
   };
-  put(w/2, (H+0.12)/2, w, H+0.12, 0.05, M.applDk, -1.55);      // tub back
+  put(w/2, (H+0.06)/2, w, H+0.06, 0.05, M.applDk, -1.55);      // tub back
   put(w/2, 0.30, w-0.16, 0.06, 1.5, M.applDk, -1.52);          // tub floor
   put(w/2, H-0.06, w-0.16, 0.06, 1.5, M.applDk, -1.52);
   put(w/2, 0.75, w-0.30, 0.5, 1.2, M.applIn, -1.40);           // lower basket
