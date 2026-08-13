@@ -204,7 +204,8 @@ function makeMaterials(){
   // Interior liners. Deliberately NOT in the convertPBR spec: they stay Lambert
   // so their emissive terms read as built-in lighting without real lights.
   M.cabIn  = new THREE.MeshLambertMaterial({color:0xe9e5dc});
-  M.applIn = new THREE.MeshLambertMaterial({color:0xf3f6f8, emissive:0x40464c});
+  M.applIn = new THREE.MeshLambertMaterial({color:0x181b1e});   // fridge liner: dark until lit
+  M.dwIn   = new THREE.MeshLambertMaterial({color:0xdfe3e6});   // dishwasher baskets, static
   M.ovenIn = new THREE.MeshLambertMaterial({color:0x232528, emissive:0x2c1e0c});
   M.coke   = new THREE.MeshPhongMaterial({color:0xc8102e, shininess:80});
   M.wood   = new THREE.MeshLambertMaterial({color:0xb08d5e});
@@ -312,21 +313,36 @@ function makeMaterials(){
   /* ---- detailed material maps: grain, veined quartz, plaster, weave, brushed steel ---- */
   const grainC=document.createElement('canvas'); grainC.width=1024; grainC.height=1024;
   { const gg=grainC.getContext('2d');
-    gg.fillStyle='#d8b98d'; gg.fillRect(0,0,1024,1024);
-    for(let i=0;i<62;i++){
-      gg.strokeStyle=`rgba(108,74,42,${0.18+Math.random()*0.2})`;
-      gg.lineWidth=2.2+Math.random()*3.6;
-      const y0=Math.random()*1024;
-      gg.beginPath(); gg.moveTo(0,y0);
-      for(let x2=0;x2<=1024;x2+=28)
-        gg.lineTo(x2, y0+Math.sin(x2/210+i)*7+Math.sin(x2/57+i*2)*2);
+    // White-oak rift grain. The old version was 62 thick high-alpha streaks,
+    // which striped hard on small parts (L8); this one is many fine low-alpha
+    // strands over soft tonal drift, so close-up reads as figure, not banding.
+    gg.fillStyle='#d3bc97'; gg.fillRect(0,0,1024,1024);
+    for(let i=0;i<26;i++){                              // broad tonal drift
+      const x=Math.random()*1024, y=Math.random()*1024, r=170+Math.random()*320;
+      const l=(Math.random()*16-8)|0;
+      const g2=gg.createRadialGradient(x,y,0,x,y,r);
+      g2.addColorStop(0,`rgba(${196+l},${168+l},${128+l},0.15)`);
+      g2.addColorStop(1,'rgba(0,0,0,0)');
+      gg.fillStyle=g2; gg.fillRect(0,0,1024,1024);
+    }
+    for(let i=0;i<780;i++){                             // fine strands
+      const y0=Math.random()*1024, dark=Math.random()<0.16;
+      gg.strokeStyle=dark?`rgba(112,84,52,${0.07+Math.random()*0.05})`
+                         :`rgba(150,120,84,${0.04+Math.random()*0.05})`;
+      gg.lineWidth=0.6+Math.random()*1.5;
+      gg.beginPath(); gg.moveTo(-16,y0);
+      let y=y0;
+      for(let x2=0;x2<=1040;x2+=90+Math.random()*80){
+        y=y0+Math.sin(x2*0.005+i)*4+(Math.random()*2-1)*1.5;
+        gg.lineTo(x2,y);
+      }
       gg.stroke();
     }
-    for(let i=0;i<7;i++){
+    for(let i=0;i<5;i++){                               // sparse, quiet cathedrals
       const cx3=Math.random()*1024, cy3=Math.random()*1024;
-      gg.strokeStyle='rgba(108,74,42,0.2)'; gg.lineWidth=1.8;
-      for(let r=14;r<170;r+=13){
-        gg.beginPath(); gg.ellipse(cx3,cy3,r*2.7,r,0,0,Math.PI*2); gg.stroke();
+      gg.strokeStyle='rgba(122,92,58,0.09)'; gg.lineWidth=1.1;
+      for(let r=16;r<130;r+=12+Math.random()*8){
+        gg.beginPath(); gg.ellipse(cx3,cy3,r*3.1,r,0,0,Math.PI*2); gg.stroke();
       }
     }
   }
@@ -405,12 +421,12 @@ function makeMaterials(){
   M.wall.map=T(plasterC,5,3);  M.wallX.map=T(plasterC,5,3);  M.ceil.map=T(plasterC,4,4);
   M.cab.map=T(plasterC,2.4,2.4);
   M.cabIslNavy.map=T(plasterC,2,2);
-  M.cabIslOak.map=T(grainC,1.2,1.2);   M.cabIslOak.color.setHex(0xd9c4a3);
+  M.cabIslOak.map=T(grainC,2.2,2.2);   M.cabIslOak.color.setHex(0xd9c4a3);
   M.top.map=T(veinC,0.85,0.85);
-  M.wood.map=T(grainC,1.1,1.1);        M.wood.color.setHex(0xf2e4cf);
-  M.woodDk.map=T(grainC,1.4,1.4);      M.woodDk.color.setHex(0xa98f6f);
-  M.beam.map=T(grainC,2.4,0.5);        M.beam.color.setHex(0x6f5638);
-  M.rail.map=T(grainC,2,1);            M.rail.color.setHex(0xa3906f);
+  M.wood.map=T(grainC,2.6,2.6);        M.wood.color.setHex(0xf2e4cf);
+  M.woodDk.map=T(grainC,2.8,2.8);      M.woodDk.color.setHex(0xa98f6f);
+  M.beam.map=T(grainC,3.2,0.8);        M.beam.color.setHex(0x6f5638);
+  M.rail.map=T(grainC,3,1.4);          M.rail.color.setHex(0xa3906f);
   M.door.map=T(plasterC,2,2);
   M.cushion.map=T(weaveC,3,3); M.cushB.map=T(weaveC,4,4); M.pillow.map=T(weaveC,2,2);
   M.sofa.map=T(weaveC,4,4);
@@ -434,7 +450,7 @@ function loadExternalTextures(){
   const wants=[
     ['floor.jpg',   [['floor',6,6]]],
     ['stone.jpg',   [['stone',1.4,2.0]]],
-    ['wood.jpg',    [['wood',1.1,1.1],['woodDk',1.4,1.4],['beam',2.4,0.5],['rail',2,1],['cabIslOak',1.2,1.2]]],
+    ['wood.jpg',    [['wood',2.6,2.6],['woodDk',2.8,2.8],['beam',3.2,0.8],['rail',3,1.4],['cabIslOak',2.2,2.2]]],
     ['quartz.jpg',  [['top',0.85,0.85]]],
     ['wall.jpg',    [['wall',5,3],['wallX',5,3]]],
     ['tile.jpg',    [['tile',5,1.6]]],
@@ -468,12 +484,12 @@ function loadExternalTextures(){
 }
 function convertPBR(){
   const spec={wall:{r:.95,b:.005},wallX:{r:.95,b:.005},ceil:{r:.92,b:.004,e:.85},cab:{r:.5,b:.003},
-    cabIslOak:{r:.55,b:.02},cabIslNavy:{r:.42,b:.002},ceil2:{},
+    cabIslOak:{r:.55,b:.008},cabIslNavy:{r:.42,b:.002},ceil2:{},
     top:{cls:'phys',r:.26,cc:.55,ccr:.3,b:.005},
     steel:{r:.38,m:.75,e:1.1},brass:{r:.3,m:.9,e:1.1},black:{r:.38,m:.25},
     appl:{r:.30,m:.80,e:1.35},applDk:{r:.5,m:.6,e:.9},applGl:{cls:'phys',r:.09,m:.35,cc:.9,ccr:.06,e:1.5},
     basin:{r:.34,m:.72,e:.75},faucet:{r:.3,m:.9,e:1.1},lamp:{r:.45,m:.6,e:1.0},rug:{r:1,b:.01},
-    wood:{r:.62,b:.02},woodDk:{r:.68,b:.02},cushion:{r:1,b:.012},cushB:{r:1,b:.012},
+    wood:{r:.62,b:.007},woodDk:{r:.68,b:.007},cushion:{r:1,b:.012},cushB:{r:1,b:.012},
     pillow:{r:1,b:.012},sofa:{r:1,b:.014},woven:{r:.95},door:{r:.6,b:.003},trimW:{r:.5,b:.003},frame:{r:.45,m:.5},
     rail:{r:.85,b:.015},trimDk:{r:.55,b:.003},stone:{r:.97,b:.05},beam:{r:.85,b:.02},plank:{r:.88,b:.015},
     grass:{r:1},deck:{r:.9,b:.02},floor:{r:.62,b:.012},tile:{r:.22,b:.01}};
@@ -523,7 +539,8 @@ function matFit(base,wFt,hFt,tileFt){
 /* ---------- small builders (all args in feet) ---------- */
 let world, solids, lights;   // world group, collision boxes, decorative lights
 let movables = [];           // grabbable furniture (stools, chairs, the Coke)
-let fridgeLights = [];       // {mat, doors, t, on} — lit on a comic delay
+let fridgeLights = [];       // {mat, doors, t, on, lamp} — lit on a comic delay
+let fridgeLamp = null;       // one real PointLight, parked in whichever fridge is built
 
 function box(w,h,d, mat){
   const m = new THREE.Mesh(new THREE.BoxGeometry(F(w),F(h),F(d)), mat);
@@ -827,7 +844,9 @@ function fridge(x,z,w=3,d=2.4,faceW=false){
   sh(AW-0.26,0.05,IND-0.34,M.applIn, x+AW/2,divY+0.10,IND/2+0.10);
   const fLmat=new THREE.MeshLambertMaterial({color:0x30343a});   // off until opened
   sh(AW-0.26,0.06,IND-0.34,fLmat, x+AW/2,H-0.13,IND/2+0.10);
-  fridgeLights.push({mat:fLmat, doors:['frL'+tag,'frR'+tag], t:0, on:false});
+  fridgeLights.push({mat:fLmat, doors:['frL'+tag,'frR'+tag], t:0, on:false,
+    lamp:new THREE.Vector3(F(faceW ? x+DT+IND/2+0.2 : x+AW/2), F(H-0.45),
+                           F(faceW ? z+AW/2 : z+IND/2+0.2))});
   sh(0.06,H-divY-0.3,IND-0.3,M.applIn, x+0.16,(divY+H)/2,IND/2+0.10);
   sh(0.06,H-divY-0.3,IND-0.3,M.applIn, x+AW-0.16,(divY+H)/2,IND/2+0.10);
   sh(AW-0.26,H-divY-0.3,0.06,M.applIn, x+AW/2,(divY+H)/2,0.14);
@@ -1020,8 +1039,8 @@ function dishwasher(x,z,w=2,alongX=true,out=1){
   put(w/2, (H+0.06)/2, w, H+0.06, 0.05, M.applDk, -1.55);      // tub back
   put(w/2, 0.30, w-0.16, 0.06, 1.5, M.applDk, -1.52);          // tub floor
   put(w/2, H-0.06, w-0.16, 0.06, 1.5, M.applDk, -1.52);
-  put(w/2, 0.75, w-0.30, 0.5, 1.2, M.applIn, -1.40);           // lower basket
-  put(w/2, 1.55, w-0.30, 0.4, 1.2, M.applIn, -1.40);           // upper basket
+  put(w/2, 0.75, w-0.30, 0.5, 1.2, M.dwIn, -1.40);             // lower basket
+  put(w/2, 1.55, w-0.30, 0.4, 1.2, M.dwIn, -1.40);             // upper basket
   put(w/2, TOE/2, w-0.05, TOE, 0.07, M.applDk, 0);             // toe recess
   const dh=H-TOE-CTL-0.05;
   // the door is bottom-hinged like an oven; axis follows the run direction
@@ -1708,6 +1727,8 @@ function init(){
   scene.add(sun);
   const fill = new THREE.PointLight(0xffe9c8, 0.5, F(34), 2);
   fill.position.set(F(10),F(8),F(7)); scene.add(fill);
+  fridgeLamp = new THREE.PointLight(0xffedc9, 0, F(4.5), 2);   // lives at intensity 0
+  scene.add(fridgeLamp);
   const fill2 = new THREE.PointLight(0xffe9c8, 0.4, F(34), 2);
   fill2.position.set(F(26),F(8),F(6)); scene.add(fill2);
 
@@ -2074,10 +2095,14 @@ function updateOpenables(dt){
       if(!fl.on && fl.t > 0.6){       // the beat before the light finds you
         fl.on = true;
         fl.mat.color.setHex(0xfff6dd); fl.mat.emissive.setHex(0xd9c79a);
+        M.applIn.color.setHex(0xf3f6f8); M.applIn.emissive.setHex(0x4a5158);
+        if(fridgeLamp){ fridgeLamp.position.copy(fl.lamp); fridgeLamp.intensity=1.15; }
       }
     } else if(fl.on || fl.t){
       fl.on=false; fl.t=0;
       fl.mat.color.setHex(0x30343a); fl.mat.emissive.setHex(0x000000);
+      M.applIn.color.setHex(0x181b1e); M.applIn.emissive.setHex(0x000000);
+      if(fridgeLamp) fridgeLamp.intensity=0;
     }
   }
   for(const g of openables){
