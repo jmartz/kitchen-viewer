@@ -607,7 +607,7 @@ function addWindow(x,z,alongX,op){
 }
 
 /* shaker door & drawer fronts with brass knobs along a cabinet face */
-function shakerRun(x,z,len,alongX,out,mat){
+function shakerRun(x,z,len,alongX,out,mat,panel){
   mat=mat||M.cab;
   const tm=(mat===M.cab)?M.trimDk:mat;
   const D=0.065;
@@ -622,6 +622,7 @@ function shakerRun(x,z,len,alongX,out,mat){
     const st=alongX?box(0.12,2.61,0.09,tm):box(0.09,2.61,0.12,tm);
     place(st, alongX?x+pp:x+out*(D-0.017), 1.545, alongX?z+out*(D-0.017):z+pp);
   }
+  if(panel) return;      // decorative face only: frame, no doors, no hardware
   const tag=(alongX?'X':'Z')+x.toFixed(2)+','+z.toFixed(2);
   for(let i=0;i<n;i++){
     const pp=(i+0.5)*len/n;
@@ -669,6 +670,16 @@ function bayDrawer(name, x, z, alongX, out, D, u0, w, y0, y1, mat, px, py, pz){
   setDoorHandle(g, toHinge(g, place(dk, px, py, pz)));
 }
 
+/* wall light switch: plate + rocker(s), gang-able. Caller gives the face pos. */
+function lightSwitch(x,z,y,alongX,gang=1){
+  const w=0.32*gang;
+  place(alongX?box(w,0.46,0.05,M.trimW):box(0.05,0.46,w,M.trimW), x,y,z).castShadow=false;
+  for(let i=0;i<gang;i++){
+    const off=(i-(gang-1)/2)*0.30;
+    place(alongX?box(0.11,0.26,0.09,M.trimDk):box(0.09,0.26,0.11,M.trimDk),
+          alongX?x+off:x, y, alongX?z:z+off).castShadow=false;
+  }
+}
 /* wall outlet: white plate + rocker */
 function outlet(x,z,y,alongX){
   const plate = alongX? box(0.32,0.5,0.035,M.trimW) : box(0.035,0.5,0.32,M.trimW);
@@ -1099,11 +1110,16 @@ function chair(x,z,facing,rotQ){
   return g;
 }
 function chairRaw(x,z,facing){ // dining chair, facing ±x
-  place(box(1.3,0.14,1.3,M.wood), x,1.5,z);
-  for(const l of [[-0.5,-0.5],[0.5,-0.5],[-0.5,0.5],[0.5,0.5]])
-    place(box(0.1,1.45,0.1,M.woodDk), x+l[0],0.75,z+l[1]);
-  place(box(0.12,1.8,1.3,M.woodDk), x-facing*0.56, 2.35, z);
-  solid(x-0.65,z-0.65,1.3,1.3);
+  place(box(1.35,0.09,1.40,matFit(M.wood,1.35,1.4,2.4)), x,1.5,z);   // seat
+  place(box(1.22,0.15,1.26,M.woodDk), x,1.40,z);                      // apron
+  const bxx=x-facing*0.60, fxx=x+facing*0.60;
+  for(const zz of [-0.60,0.60]){
+    place(box(0.09,1.48,0.09,M.woodDk), fxx,0.74, z+zz);              // front legs
+    place(box(0.09,3.05,0.09,M.woodDk), bxx,1.525, z+zz);             // back posts
+  }
+  place(box(0.07,0.38,1.14,M.woodDk), bxx, 2.83, z);                  // crest rail
+  place(box(0.06,0.20,1.14,M.woodDk), bxx, 2.28, z);                  // slat
+  solid(x-0.68,z-0.68,1.36,1.36);
 }
 /* L-shaped corner sectional with the corner at the NE, so the east leg faces
    west at the fireplace and the north leg faces south at the TV. (x,z) is the
@@ -1150,18 +1166,23 @@ function banquette(x,z,w,d){ // built-in bench: white base, gray-blue cushion
   place(box(w-0.05,0.32,d-0.05,M.cushB), x+w/2,1.46,z+d/2);
   solid(x,z,w,d);
 }
-function trestleTable(cx,cz,w,d){ // pedestal table: center posts, clear slide-in
-  place(box(w,0.18,d,matFit(M.wood,Math.max(w,d),Math.min(w,d),3.5)), cx,2.5,cz);
-  const len=Math.max(w,d), n=Math.max(2,Math.round(len/2.6));
-  for(let i=0;i<n;i++){
-    const t=(i+0.5)/n;
-    const px2 = w>d ? cx-w/2+t*w : cx;
-    const pz2 = w>d ? cz : cz-d/2+t*d;
-    const post=new THREE.Mesh(new THREE.CylinderGeometry(F(0.22),F(0.22),F(2.3),12),M.woodDk);
-    place(post, px2, 1.26, pz2);
-    const foot=new THREE.Mesh(new THREE.CylinderGeometry(F(0.62),F(0.72),F(0.12),14),M.woodDk);
-    place(foot, px2, 0.06, pz2);
+function trestleTable(cx,cz,w,d){ // trestle: slab supports + stretcher beam
+  place(box(w,0.16,d,matFit(M.wood,Math.max(w,d),Math.min(w,d),3.5)), cx,2.5,cz);
+  place(box(w-0.24,0.10,d-0.24,M.woodDk), cx,2.39,cz);                // build-up edge
+  const along=d>=w, len=Math.max(w,d), across=Math.min(w,d);
+  for(const tt of [0.16,0.84]){
+    const px2 = along ? cx : cx-w/2+tt*w;
+    const pz2 = along ? cz-d/2+tt*d : cz;
+    const slab = along ? box(across-0.55,2.20,0.18,M.woodDk)
+                       : box(0.18,2.20,across-0.55,M.woodDk);
+    place(slab, px2, 1.22, pz2);
+    const foot = along ? box(across-0.35,0.14,0.62,M.woodDk)
+                       : box(0.62,0.14,across-0.35,M.woodDk);
+    place(foot, px2, 0.07, pz2);
+    place(foot.clone(), px2, 2.28, pz2);
   }
+  const str = along ? box(0.16,0.34,len*0.60,M.woodDk) : box(len*0.60,0.34,0.16,M.woodDk);
+  place(str, cx, 1.02, cz);
   solid(cx-w/2,cz-d/2,w,d);
 }
 /* Overhead fixture. Shade geometry switches on FIN.lampStyle; the metal is
@@ -1209,8 +1230,9 @@ function nookTable(cx,cz,alongX){
   const top=new THREE.Mesh(geo,M.wood);
   top.scale.set(alongX?3.2:1.25,1,alongX?1.25:3.2);
   place(top,cx,2.5,cz);
-  const ped=new THREE.Mesh(new THREE.CylinderGeometry(F(0.25),F(0.6),F(2.4),12),M.woodDk);
-  place(ped,cx,1.25,cz);
+  place(box(0.36,2.32,0.36,M.woodDk), cx,1.22,cz);                    // square post
+  place(box(1.7,0.13,0.44,M.woodDk), cx,0.065,cz);                    // cross feet
+  place(box(0.44,0.13,1.7,M.woodDk), cx,0.065,cz);
   if(alongX) solid(cx-3.3,cz-1.4,6.6,2.8); else solid(cx-1.4,cz-3.3,2.8,6.6);
 }
 function bench(x,z,w,d){
@@ -1325,8 +1347,8 @@ function buildShared(opt){
   }
   // gables run wall-face to wall-face so the slopes have something to die into
   const GW=FAM_XE-FAM_XW, GX=(FAM_XW+FAM_XE)/2;
-  place(box(GW,6.3,0.45,M.wall), GX, 11.05, ZONE_D+WALL_T/2);   // north gable, down to the 8' kitchen ceiling
-  place(box(GW,5.2,0.45,M.wall), GX, 11.5, SOUTH+WALL_T/2);     // south gable
+  place(box(GW,6.3,0.45,M.wall), GX, 11.05, ZONE_D+WALL_T/2-0.06); // north gable (offset: it z-fought the header)
+  place(box(GW,5.2,0.45,M.wall), GX, 11.5, SOUTH+WALL_T/2+0.06); // south gable (offset: it z-fought the wall)
   place(box(0.6,0.8,FAM_D,M.beam), RX, RH-0.3, ZONE_D+FAM_D/2); // ridge beam
   for(let j=1;j<5;j++){
     const bz=ZONE_D+j*FAM_D/5;
@@ -1421,6 +1443,12 @@ function buildShared(opt){
   // z=20.0 put this one dead centre of the pantry doorway once the wall was cut
   // open for it, so it hung in mid-air. Moved south of the pantry (z 16.44..21.74)
   // onto wall that still exists.
+  lightSwitch(7.0, ZONE_D-0.03, 4.0, true);          // kitchen, at the deck door
+  lightSwitch(FAM_XWI+0.03, 21.3, 4.0, false);       // family, by the french doors
+  lightSwitch(21.05, 16.7, 4.0, false);              // family, by the passage
+  lightSwitch(21.05, 11.2, 4.0, false);              // nook side of the passage
+  lightSwitch(21.56, 12.3, 4.0, false);              // dining side
+  lightSwitch(35.5, ENT_NZ+0.05, 4.0, true, 2);      // entry, by the front door
   outlet(6.35,13.6,1.3,false); outlet(20.9,23.0,1.3,false);
   outlet(13.5,SOUTH-0.28,1.3,true);
 
@@ -1519,6 +1547,7 @@ function buildOptionA(variant){
   // and the shaker face frame breaks around the DW bay instead of drawing over it.
   const SKA={x:0.55,z:4.75,w:1.5,d:2.5};              // sink cutout (front-to-back x)
   counter(0.25,2.33, 2.08, 9.6, M.cab, SKA, 'x+');
+  lightSwitch(0.03, 2.45, 3.8, false, 2);   // disposal + under-cabinet lights
   shakerRun(2.33,2.33, 0.30, false, 1);               // corner filler
   shakerRun(2.33,4.63, 7.30, false, 1);               // sink base + run south
   dishwasher(2.33,2.63, 2.0, false, 1);
@@ -1545,9 +1574,9 @@ function buildOptionA(variant){
     place(box(iw-0.24,0.06,0.72,M.cabIn), icx, 1.30, iz+1.52);
   }
   shakerRun(ix+0.2,iz+0.07, 7.35, true, -1, IB);         // working-side doors
-  shakerRun(ix+0.2,iz+2.00, 7.35, true, 1, IB);          // back panel detail
-  shakerRun(ix+0.2,iz+0.07, 1.93, false, -1, IB);        // west end
-  shakerRun(ix+7.55,iz+0.07, 1.93, false, 1, IB);        // east end
+  shakerRun(ix+0.2,iz+2.00, 7.35, true, 1, IB, true);    // back: panels only
+  shakerRun(ix+0.2,iz+0.07, 1.93, false, -1, IB, true);  // west end: panel
+  shakerRun(ix+7.55,iz+0.07, 1.93, false, 1, IB, true);  // east end: panel
   place(box(7.75,0.2,3.0,matFit(M.top,7.75,3.0,6)), ix+3.875,CT_H-0.1, iz+1.5);
   solid(ix,iz,7.75,3.0);
   for(let i=0;i<4;i++) stool(ix+1.05+i*1.85, iz+2.72);   // tucked under the overhang
@@ -1595,7 +1624,7 @@ function buildOptionB(){
     place(box(0.72,0.06,7.5,M.cabIn), px+1.95+0.48, 1.30, 4.4);
   }
   shakerRun(px+2.95,0.6, 7.6, false, 1, IB);             // working-side doors
-  shakerRun(px+0.95,0.6, 7.6, false, -1, IB);            // nook-side panel detail
+  shakerRun(px+0.95,0.6, 7.6, false, -1, IB, true);      // nook-side: panels
   place(box(3.0,0.2,8.0,matFit(M.top,8,3,6)), px+1.5,CT_H-0.1, 4.45); // countertop
   solid(px,0.45,3.0,8.0);
   for(let i=0;i<3;i++) stool(px+0.25, 2.2+i*2.2, false); // tucked under west overhang
@@ -1603,6 +1632,7 @@ function buildOptionB(){
   // north counter east of peninsula: D/W + sink centred under the 3' window (x 13..16)
   const SKB={x:13.25,z:0.55,w:2.5,d:1.5};
   counter(10.6,0.25, ZONE_W-10.6-0.25, 2.08, M.cab, SKB, 'z+');
+  lightSwitch(12.5, 0.03, 3.8, true, 2);    // disposal + under-cabinet lights
   shakerRun(10.6,2.33, 0.30, true, 1);                   // filler at the peninsula
   shakerRun(12.9,2.33, ZONE_W-0.25-12.9, true, 1);       // sink base + run east
   dishwasher(10.9,2.33, 2.0, true, 1);
@@ -1748,6 +1778,7 @@ function buildOption(key){
   buildShared(key); OPTS[key].build();
   scene.add(world);
   applyFinishes();          // colours survive an A/B or finish rebuild
+  if(xray) setXray(true);   // new clones inherit the current x-ray state
   document.getElementById('optdesc').textContent = OPTS[key].desc;
   drawMapStatic();
   if(planMode) drawPlan();
@@ -1927,6 +1958,17 @@ function setXray(v){
     if(k==='glass'||k==='lightE') continue;
     M[k].transparent=v; M[k].opacity=v?0.32:1; M[k].needsUpdate=true;
   }
+  // clones too: a matFit/steelFace clone born during x-ray inherits the ghost
+  // opacity and the base-only restore never reached it
+  if(world){
+    const seen=new Set();
+    world.traverse(o=>{ const mm=o.material;
+      if(!mm||Array.isArray(mm)||seen.has(mm)) return;
+      seen.add(mm);
+      if(mm.userData && (mm.userData.baseKey||mm.userData.pinned)){
+        mm.transparent=v; mm.opacity=v?0.32:1; mm.needsUpdate=true;
+      }});
+  }
 }
 function setView(mode){
   overhead=(mode==='over'); planMode=(mode==='plan');
@@ -1942,6 +1984,7 @@ function setView(mode){
 function collide(nx,nz){
   const r=F(0.9);
   for(const b of solids){
+    if(b.off) continue;               // solid suspended (its furniture is in hand)
     const cx=Math.max(b.x1,Math.min(nx,b.x2));
     const cz=Math.max(b.z1,Math.min(nz,b.z2));
     const dx=nx-cx, dz=nz-cz, d2=dx*dx+dz*dz;
@@ -2061,7 +2104,7 @@ function withYaw(q, px, pz, fn){
    that an A/B or finish change triggers. `openables` is the live list and is
    rebuilt with the world.
    ============================================================ */
-const DOORS = {'deck-kit':1, 'deck-famN':1};   // the two deck doors live open
+const DOORS = {};   // every door starts closed
 let openables = [];
 
 function hinge(name, hx, hy, hz, axis, openA, dir){
@@ -3301,7 +3344,7 @@ function xrFrame(dt, frame){
   drawPanel();
 
   /* ---- pointer / teleport arc ---- */
-  updateHandleIcons();
+  if((icFrame=(icFrame+1)%3)===0) updateHandleIcons();
   updateDoorGrab();
   updateMovGrab();
   updateAvatar(dt);
@@ -3369,7 +3412,7 @@ function placePanel(dt){
    drop mapped per hinge axis. Let go and the door stays exactly where you left
    it (DOORS holds fractions now); the ring dims, and fades once you move away. */
 const NEAR_R = 0.3048, GRAB_R = 0.22;
-let iconDim=null, iconLit=null, iconPool=[], grabDoor=null, grabCtrl=null, grabRef={};
+let iconDim=null, iconLit=null, iconPool=[], grabDoor=null, grabCtrl=null, grabRef={}, icFrame=0;
 let grabMov=null, movOff=new THREE.Vector3();
 function iconTex(fill){
   const c=document.createElement('canvas'); c.width=c.height=64;
@@ -3484,6 +3527,7 @@ function endDoorGrab(){
 }
 function startMovGrab(c, g){
   grabMov=g; grabCtrl=c;
+  for(const i of g.userData.mov.sIdx){ if(solids[i]) solids[i].off=true; }
   movOff.copy(g.position).sub(grabPoint(c));
   if(!g.userData.mov.freeY) movOff.y=0;
 }
@@ -3512,6 +3556,7 @@ function endMovGrab(){
       .filter(h=>h.object.parent!==grabMov && !grabMov.children.includes(h.object))[0];
     if(hit) grabMov.position.y = hit.point.y - mv.baseY + 0.005;
   }
+  if(grabMov) for(const i of grabMov.userData.mov.sIdx){ if(solids[i]) solids[i].off=false; }
   grabMov=null; grabCtrl=null;
 }
 
@@ -3521,13 +3566,17 @@ let avatar=null, avYaw=0;
 function ensureAvatar(){
   if(avatar) return avatar;
   avatar=new THREE.Group();
-  const am=new THREE.MeshLambertMaterial({color:0x39404a, transparent:true, opacity:0.6});
-  const mk=(w,h,d)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), am);
-    m.castShadow=m.receiveShadow=false; avatar.add(m); return m; };
-  avatar.userData.torso=mk(0.48,1,0.27);       // shoulders 19", chest 10.5"
-  avatar.userData.hips=mk(0.43,0.22,0.27);
-  avatar.userData.legL=mk(0.17,1,0.19);
-  avatar.userData.legR=mk(0.17,1,0.19);
+  // Rounded, slim, and barely-there: the old blocky boxes read as "a big
+  // transparent cube" underfoot and their screen coverage cost fill rate
+  // every time you looked down.
+  const am=new THREE.MeshLambertMaterial({color:0x39404a, transparent:true,
+    opacity:0.42, depthWrite:false});
+  const mk=(rt,rb,h)=>{ const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,14), am);
+    m.castShadow=m.receiveShadow=false; m.renderOrder=2; avatar.add(m); return m; };
+  avatar.userData.torso=mk(0.16,0.185,1); avatar.userData.torso.scale.z=0.58;
+  avatar.userData.hips=mk(0.20,0.215,0.22); avatar.userData.hips.scale.z=0.66;
+  avatar.userData.legL=mk(0.072,0.088,1);
+  avatar.userData.legR=mk(0.072,0.088,1);
   rig.add(avatar);
   return avatar;
 }
@@ -3658,13 +3707,17 @@ async function initVRButton(){
   if(!ok) return;
   btn.style.display = 'block';
   btn.onclick = async ()=>{
-    const live = renderer.xr.getSession();
-    if(live){ live.end(); return; }
+    if(xrOn){ const live = renderer.xr.getSession(); if(live) live.end(); return; }
+    btn.textContent = 'Starting\u2026';
     try{
+      renderer.xr.setReferenceSpaceType('local-floor');
       const s = await navigator.xr.requestSession('immersive-vr',
         {optionalFeatures:['local-floor','bounded-floor','hand-tracking']});
       await renderer.xr.setSession(s);
-    }catch(e){ toast('Could not start VR: ' + e.message, 6000); }
+    }catch(e){
+      btn.textContent = 'Enter VR';
+      toast('VR failed: ' + ((e && (e.name+': '+e.message)) || e), 7000);
+    }
   };
 }
 
