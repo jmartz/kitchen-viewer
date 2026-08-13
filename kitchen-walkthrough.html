@@ -603,7 +603,7 @@ function shakerRun(x,z,len,alongX,out,mat){
   for(let i=0;i<=n;i++){
     const pp=Math.min(len-0.05,Math.max(0.05,i*len/n));
     const st=alongX?box(0.12,2.61,0.09,tm):box(0.09,2.61,0.12,tm);
-    place(st, alongX?x+pp:x+out*(D-0.012), 1.545, alongX?z+out*(D-0.012):z+pp);
+    place(st, alongX?x+pp:x+out*(D-0.017), 1.545, alongX?z+out*(D-0.017):z+pp);
   }
   const tag=(alongX?'X':'Z')+x.toFixed(2)+','+z.toFixed(2);
   for(let i=0;i<n;i++){
@@ -671,7 +671,7 @@ function baseShell(x,z,w,d,mat,front){
   const fx = front==='x+'?1:front==='x-'?-1:0;
   const fz = front==='z+'?1:front==='z-'?-1:0;
   place(box(w,0.34,d,mat), x+w/2,0.17, z+d/2);                       // toe mass
-  place(box(w-0.10,0.07,d-0.10,M.cabIn), x+w/2,0.375, z+d/2);       // interior floor
+  place(box(w-0.10,0.07,d-0.10,M.cabIn), x+w/2,0.39, z+d/2);        // interior floor
   place(box(w,0.30,d,mat), x+w/2, BASE_H-0.15, z+d/2);              // top stretcher
   if(fx){
     place(box(0.10,BASE_H,d,mat), x+w/2 - fx*(w/2-0.05), BASE_H/2, z+d/2);  // back
@@ -754,6 +754,23 @@ function upper(x,z,w,d,face='z+',h=2.6,y0=4.6){
                   : place(k, x+u, y0+0.46, fpz+fz*(D+0.05))));
   }
 }
+function tallPantry(x0,z0,w,d){
+  const x1=x0+w, zf=z0+d;
+  place(box(0.10,7.2,d,M.cab), x0+0.05,3.6, z0+d/2);
+  place(box(0.10,7.2,d,M.cab), x1-0.05,3.6, z0+d/2);
+  place(box(w,7.2,0.10,M.cab), x0+w/2,3.6, z0+0.05);
+  place(box(w,0.15,d,M.cab), x0+w/2,7.12, z0+d/2);
+  place(box(w,0.22,d,M.cab), x0+w/2,0.11, z0+d/2);
+  for(const sy of [1.3,2.5,3.7,4.9,6.05])
+    place(box(w-0.18,0.06,d-0.18,M.cabIn), x0+w/2, sy, z0+d/2);
+  solid(x0,z0,w,d);
+  const gL=hinge('panA-L', x0+0.06, 0, zf-0.02, 'y', -1.5);
+  toHinge(gL, place(box(1.42,6.7,0.09,M.cab), x0+0.06+0.71, 3.6, zf));
+  setDoorHandle(gL, toHinge(gL, place(box(0.06,3.4,0.1,M.brass), x0+1.34, 3.6, zf+0.10)));
+  const gR=hinge('panA-R', x1-0.06, 0, zf-0.02, 'y', 1.5);
+  toHinge(gR, place(box(1.42,6.7,0.09,M.cab), x1-0.06-0.71, 3.6, zf));
+  setDoorHandle(gR, toHinge(gR, place(box(0.06,3.4,0.1,M.brass), x1-1.34, 3.6, zf+0.10)));
+}
 function tallCab(x,z,w,d,h=7.2){ place(box(w,h,d,M.cab), x+w/2,h/2,z+d/2); solid(x,z,w,d); }
 /* Appliance front helper. Works in a face-local frame so each appliance is
    written once and mirrors correctly:
@@ -788,13 +805,6 @@ function fridge(x,z,w=3,d=2.4,faceW=false){
   const H=5.9, GAP=0.05, SIDE=0.04, TOE=0.30, DT=0.17;
   const AW = faceW ? d : w;                       // width across the front
   const put = applFace(x,z,d,faceW);
-  // Carcass, set back by the door thickness so the doors read proud. BOTH
-  // branches have to shorten the carcass along its own depth axis. The faceW
-  // branch kept the full depth `w` and only shifted the centre, so its front
-  // face landed exactly on the door fronts — 5.5 sq ft of coincident surface,
-  // invisible on a monitor and a hard strobe in stereo.
-  if(faceW) place(box(w-DT,H,d,M.applDk), x+DT+(w-DT)/2, H/2, z+d/2);
-  else      place(box(w,H,d-DT,M.applDk), x+w/2, H/2, z+(d-DT)/2);
   put(AW/2, TOE*0.55, AW-2*SIDE, TOE*0.9, 0.05, M.applDk);          // toe grille
   // Everything below hangs off a hinge so it can be tapped open. Names are
   // suffixed with the footprint so Option A and Option B fridges don't share
@@ -869,7 +879,7 @@ function cooktop(x,z,w=2.6,d=1.8){
   const ring=(cx,cz,r)=>{
     const g=new THREE.RingGeometry(F(r-0.028),F(r),40);
     const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:0x6d7078}));
-    m.rotation.x=-Math.PI/2; m.castShadow=false; place(m,cx,CT_H+0.062,cz);
+    m.rotation.x=-Math.PI/2; m.castShadow=false; place(m,cx,CT_H+0.072,cz);
   };
   ring(x+0.68,z+0.52,0.36); ring(x+w-0.68,z+0.52,0.29);
   ring(x+0.68,z+d-0.5,0.29); ring(x+w-0.68,z+d-0.5,0.36);
@@ -897,7 +907,9 @@ function ovenTower(x,z,w,alongX=true,out=1){
   enc(EW,7.2,0.10, EX+EW/2,3.6, z-out*(EB-0.05));
   put(w/2, 1.27, w+0.25, 2.06, 0.06, M.cab, -0.02);              // filler below
   put(w/2, 6.45, w+0.25, 1.55, 0.06, M.cab, -0.02);              // filler above
-  put(w/2, 4.05, w+0.08, 3.65, 0.05, M.applDk, -0.04);          // surround
+  put(w/2, 2.27, w+0.08, 0.12, 0.05, M.applDk, 0.0);            // reveal below
+  put(w/2, 4.29, w+0.08, 0.14, 0.05, M.applDk, 0.0);            // between doors
+  put(w/2, 5.52, w+0.08, 0.12, 0.05, M.applDk, 0.0);            // above micro
   const doors=[{n:'ovT',y0:2.30,y1:4.25,glass:0.72},            // oven
                {n:'mwT',y0:4.33,y1:5.48,glass:0.55}];           // micro/convection
   for(const dd of doors){
@@ -1478,14 +1490,8 @@ function buildOptionA(variant){
   fridge(10.55,0.25, 3.0, 2.4);
   if(variant === 'morning') morningStation(13.58, 0.25, 3.0, 1.35);
   else {
-    // shallow full-height pantry cabinet in the 3'-0" bay (per plan setback)
-    tallCab(13.58,0.25, 3.0, 1.35);
-    for(const px2 of [13.66,15.02,15.14,16.5])
-      place(box(0.1,6.9,0.08,M.trimDk), px2,3.55,1.64);   // stiles + center reveal
-    for(const py2 of [0.25,3.55,6.9])
-      place(box(2.95,0.12,0.08,M.trimDk), 15.08,py2,1.64); // rails
-    place(box(0.06,3.4,0.1,M.brass), 14.9,3.6,1.7);       // pulls
-    place(box(0.06,3.4,0.1,M.brass), 15.26,3.6,1.7);
+    // shallow full-height pantry: hollow, shelved, and the doors open now
+    tallPantry(13.58, 0.25, 3.0, 1.35);
   }
   // west counter with sink + DW: full run to the south corner.
   // Sink centres on the 6' sliding window (z 3..9); DW sits just north of it,
@@ -1509,7 +1515,7 @@ function buildOptionA(variant){
   {  // hollow island: bottom, top stretcher, ends, centre spine; doors both sides
     const iw=7.35, idp=1.93, icx=ix+3.875;
     place(box(iw,0.34,idp,IB), icx,0.17, iz+1.035);
-    place(box(iw-0.10,0.07,idp-0.10,M.cabIn), icx,0.375, iz+1.035);
+    place(box(iw-0.10,0.07,idp-0.10,M.cabIn), icx,0.39, iz+1.035);
     place(box(iw,0.30,idp,IB), icx, BASE_H-0.15, iz+1.035);
     place(box(0.10,BASE_H,idp,IB), ix+0.05, BASE_H/2, iz+1.035);
     place(box(0.10,BASE_H,idp,IB), ix+7.30, BASE_H/2, iz+1.035);
@@ -1557,7 +1563,16 @@ function buildOptionB(){
   pendant(2.67,3.60,6.7); pendant(2.67,7.20,6.7);
   // peninsula: 3' wide, 8' long from north wall, seating on west side
   const px=7.6;
-  place(box(2.0,BASE_H,7.8,matFit(IB,7.8,BASE_H,3.2)), px+1.95,BASE_H/2, 4.4); // cabinet base
+  {  // hollow peninsula: bottom, stretcher, ends, spine; doors on both faces
+    place(box(2.0,0.34,7.8,IB), px+1.95,0.17, 4.4);
+    place(box(1.9,0.07,7.7,M.cabIn), px+1.95,0.39, 4.4);
+    place(box(2.0,0.30,7.8,IB), px+1.95, BASE_H-0.15, 4.4);
+    place(box(2.0,BASE_H,0.10,IB), px+1.95, BASE_H/2, 0.55);
+    place(box(2.0,BASE_H,0.10,IB), px+1.95, BASE_H/2, 8.25);
+    place(box(0.12,BASE_H,7.8,IB), px+1.95, BASE_H/2, 4.4);          // spine
+    place(box(0.72,0.06,7.5,M.cabIn), px+1.95-0.48, 1.30, 4.4);      // shelves
+    place(box(0.72,0.06,7.5,M.cabIn), px+1.95+0.48, 1.30, 4.4);
+  }
   shakerRun(px+2.95,0.6, 7.6, false, 1, IB);             // working-side doors
   shakerRun(px+0.95,0.6, 7.6, false, -1, IB);            // nook-side panel detail
   place(box(3.0,0.2,8.0,matFit(M.top,8,3,6)), px+1.5,CT_H-0.1, 4.45); // countertop
@@ -2147,7 +2162,7 @@ function morningStation(x0, z0, w, d){
   place(box(w-0.20,H,0.10,M.cab), x0+w/2, H/2, z0+0.05);    // back
   place(box(w,0.15,d,M.cab), x0+w/2, H-0.075, z0+d/2);      // top
   place(box(w-0.20,0.32,d-0.25,M.cab), x0+w/2,0.16, z0+(d-0.25)/2);       // toe
-  place(box(w-0.28,0.06,d-0.35,M.cabIn), x0+w/2,0.35, z0+(d-0.25)/2);     // floor
+  place(box(w-0.28,0.06,d-0.35,M.cabIn), x0+w/2,0.37, z0+(d-0.25)/2);     // floor
   place(box(w-0.20,0.26,d-0.25,M.cab), x0+w/2, CTY-0.31, z0+(d-0.25)/2);  // stretcher
   place(box(w-0.28,0.05,d-0.45,M.cabIn), x0+w/2, 1.7, z0+(d-0.30)/2);     // shelf
   place(box(w,0.13,d-0.05,matFit(M.top,w,d,6)), x0+w/2, CTY-0.065, z0+(d-0.05)/2);
