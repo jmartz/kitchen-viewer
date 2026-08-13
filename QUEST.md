@@ -27,18 +27,31 @@ through the island.
 
 ## Tapping things open
 
-A **short pinch** opens whatever you're pointing at: cabinet doors, drawers, the
-dishwasher, the fridge, the wall ovens, the range, the pantry bifolds. Tap again to
-close. On the desktop viewer it's a plain click.
+**Reach for a handle.** When your hand comes within a foot of any handle — cabinet
+doors, drawers, dishwasher, fridge, oven tower, range, pantry, the deck and entry
+doors — a small gold ring lights up on it. **Pinch and hold near the handle** and the
+ring brightens: the door is in your hand. Swing, slide or drop it as far as you like,
+let go, and it stays exactly where you left it. The ring dims, then disappears when
+you move away.
+
+A **short pinch from further back** still toggles things open/closed, and on the
+desktop viewer it's a plain click.
+
+**Chairs and stools can be picked up too** — pinch one and slide it where you want it.
+You can't walk through it in its new spot; it goes back home on a layout change.
+
+**You have a body now.** Look down: an average-build (200 lb) frame stands under the
+headset, sized to your real height, so you can judge whether an aisle is genuinely
+tight for a person rather than for a floating head.
 
 Note the base-cabinet carcasses aren't hollow yet, so an open door shows the
 cabinet face rather than shelves. Drawers do have boxes and read properly.
 
 ## The control panel
 
-A panel floats **below your eye line, just in front of you**. It stays put while you
-look around and only swings back into place once you've really turned away, so it
-never chases you. Press a button either by **poking it with a finger** or by
+A panel floats **below eye line and off to your left**, out of the way of where
+you're looking. It stays put while you look around and only swings round once you've
+really turned away. Press a button either by **poking it with a finger** or by
 **pointing at it and pinching**.
 
 | Button | Does |

@@ -105,8 +105,9 @@
   </div>
   <div id="optdesc"></div>
   <div class="seg" style="margin-bottom:9px">
-    <button id="btnFamA" class="on">Family A</button>
-    <button id="btnFamB">Family B</button>
+    <button id="btnFamA" class="on">Fam A</button>
+    <button id="btnFamB">Fam B</button>
+    <button id="btnFamB2">Fam B&#8242;</button>
   </div>
   <div class="row2">
     <button id="btnWalk" class="on">Walk</button>
@@ -167,6 +168,7 @@
    ============================================================ */
 const F = ft => ft * 0.3048;
 const CEIL = 9, WALL_T = 0.45;
+const KCEIL = 8;   // kitchen-zone ceiling only — Jim: the kitchen is 8', the rest is not
 // Finished counter height 36". The base carcass must reach the underside of the
 // slab — a shorter carcass leaves the top visibly floating on nothing.
 const CT_H = 3.0, CT_T = 0.13, BASE_H = CT_H - CT_T;   // 3.00 / 0.13 / 2.87
@@ -514,6 +516,7 @@ function matFit(base,wFt,hFt,tileFt){
 
 /* ---------- small builders (all args in feet) ---------- */
 let world, solids, lights;   // world group, collision boxes, decorative lights
+let movables = [];           // grabbable furniture (stools, chairs)
 
 function box(w,h,d, mat){
   const m = new THREE.Mesh(new THREE.BoxGeometry(F(w),F(h),F(d)), mat);
@@ -560,7 +563,9 @@ function wallSeg(x,z, len, alongX, opens=[], matIn=M.wall, H=CEIL){
 function addWindow(x,z,alongX,op){
   if(op.noGlass) return;
   const h = op.head-op.sill, w = op.w;
-  const g = alongX ? box(w,h,0.08,M.glass) : box(0.08,h,w,M.glass);
+  // pane tucked 0.04' inside the frame all round: shared edge planes with the
+  // trim boxes were the "glitching around the sink" (the 6' window is right there)
+  const g = alongX ? box(w-0.08,h-0.08,0.08,M.glass) : box(0.08,h-0.08,w-0.08,M.glass);
   g.castShadow=false;
   const fT=0.2;
   const mk = (ww,hh)=> alongX ? box(ww,hh,0.3,M.trimW) : box(0.3,hh,ww,M.trimW);
@@ -591,7 +596,7 @@ function shakerRun(x,z,len,alongX,out,mat){
   for(let i=0;i<=n;i++){
     const pp=Math.min(len-0.05,Math.max(0.05,i*len/n));
     const st=alongX?box(0.12,2.61,0.09,tm):box(0.09,2.61,0.12,tm);
-    place(st, alongX?x+pp:x+out*D, 1.545, alongX?z+out*D:z+pp);
+    place(st, alongX?x+pp:x+out*(D-0.012), 1.545, alongX?z+out*(D-0.012):z+pp);
   }
   const tag=(alongX?'X':'Z')+x.toFixed(2)+','+z.toFixed(2);
   for(let i=0;i<n;i++){
@@ -620,7 +625,7 @@ function bayDoor(name, x, z, alongX, out, D, hu, atStart, w, y0, y1, mat, kx, ky
   const leaf = alongX ? box(w,y1-y0,0.085,mat) : box(0.085,y1-y0,w,mat);
   toHinge(g, place(leaf, alongX?x+cu:x+out*D, (y0+y1)/2, alongX?z+out*D:z+cu));
   const k = new THREE.Mesh(new THREE.SphereGeometry(F(0.05),8,8), M.brass);
-  toHinge(g, place(k, kx, ky, kz));
+  setDoorHandle(g, toHinge(g, place(k, kx, ky, kz)));
 }
 /* One drawer: the front slides out and drags a shallow box with it. The box
    lives inside the carcass when shut, so it costs nothing visually until you
@@ -637,7 +642,7 @@ function bayDrawer(name, x, z, alongX, out, D, u0, w, y0, y1, mat, px, py, pz){
                         alongX?z+out*(D-bd/2):z+cu));
   const dk = new THREE.Mesh(new THREE.CylinderGeometry(F(0.035),F(0.035),F(0.5),8),M.brass);
   dk.rotation[alongX?'z':'x']=Math.PI/2;
-  toHinge(g, place(dk, px, py, pz));
+  setDoorHandle(g, toHinge(g, place(dk, px, py, pz)));
 }
 
 /* wall outlet: white plate + rocker */
@@ -699,8 +704,8 @@ function upper(x,z,w,d,face='z+',h=2.6,y0=4.6){
     toHinge(g, place(leaf, fx?fpx+fx*(D-0.005):x+cu, y0+h/2,
                            fx?z+cu:fpz+fz*(D-0.005)));
     const k=new THREE.Mesh(new THREE.SphereGeometry(F(0.05),10,10),M.brass);
-    toHinge(g, fx ? place(k, fpx+fx*(D+0.05), y0+0.46, z+u)
-                  : place(k, x+u, y0+0.46, fpz+fz*(D+0.05)));
+    setDoorHandle(g, toHinge(g, fx ? place(k, fpx+fx*(D+0.05), y0+0.46, z+u)
+                  : place(k, x+u, y0+0.46, fpz+fz*(D+0.05))));
   }
 }
 function tallCab(x,z,w,d,h=7.2){ place(box(w,h,d,M.cab), x+w/2,h/2,z+d/2); solid(x,z,w,d); }
@@ -762,9 +767,12 @@ function fridge(x,z,w=3,d=2.4,faceW=false){
   toHinge(gL, put(SIDE+dw/2,    dy, dw, dh, DT, steelFace(dw,dh)));
   toHinge(gR, put(AW-SIDE-dw/2, dy, dw, dh, DT, steelFace(dw,dh)));
   // pulls: verticals flanking the centre split, horizontal on the drawer
-  applPull(x,z,d,faceW, AW/2-GAP/2-0.20, dy-0.15, dh*0.62, true).forEach(m=>toHinge(gL,m));
-  applPull(x,z,d,faceW, AW/2+GAP/2+0.20, dy-0.15, dh*0.62, true).forEach(m=>toHinge(gR,m));
-  applPull(x,z,d,faceW, AW/2, fy+fh/2-0.26, AW*0.62, false).forEach(m=>toHinge(gF,m));
+  const pL=applPull(x,z,d,faceW, AW/2-GAP/2-0.20, dy-0.15, dh*0.62, true);
+  pL.forEach(m=>toHinge(gL,m)); setDoorHandle(gL, pL[0]);
+  const pR=applPull(x,z,d,faceW, AW/2+GAP/2+0.20, dy-0.15, dh*0.62, true);
+  pR.forEach(m=>toHinge(gR,m)); setDoorHandle(gR, pR[0]);
+  const pF=applPull(x,z,d,faceW, AW/2, fy+fh/2-0.26, AW*0.62, false);
+  pF.forEach(m=>toHinge(gF,m)); setDoorHandle(gF, pF[0]);
   solid(x,z,w,d);
 }
 /* induction cooktop: black glass in a slim steel bezel, printed hob rings */
@@ -781,6 +789,32 @@ function cooktop(x,z,w=2.6,d=1.8){
 }
 /* double wall oven. (x,z) is the left edge of the face plane; each cavity is
    hEach tall with a control strip and bar pull at the top of its door. */
+/* single oven + microwave/convection tower, 30" unit. Oven door drops from the
+   bottom hinge; the micro door does too (drawer-style convection). */
+function ovenTower(x,z,w,alongX=true,out=1){
+  const DT=0.12, tag='@'+x.toFixed(1)+','+z.toFixed(1);
+  const put=(u,y,uw,h,dep,mat,off)=>{
+    off=off||0;
+    const m = alongX ? box(uw,h,dep,mat) : box(dep,h,uw,mat);
+    return alongX ? place(m, x+u, y, z+out*(off+dep/2))
+                  : place(m, x+out*(off+dep/2), y, z+u);
+  };
+  put(w/2, 4.05, w+0.08, 3.65, 0.05, M.applDk, -0.04);          // surround
+  const doors=[{n:'ovT',y0:2.30,y1:4.25,glass:0.72},            // oven
+               {n:'mwT',y0:4.33,y1:5.48,glass:0.55}];           // micro/convection
+  for(const dd of doors){
+    const g=hinge(dd.n+tag, x, dd.y0, z, alongX?'x':'z', alongX ? 1.45*out : -1.45*out);
+    toHinge(g, put(w/2, (dd.y0+dd.y1)/2, w, dd.y1-dd.y0, DT, steelFace(w,dd.y1-dd.y0)));
+    toHinge(g, put(w/2, dd.y1-0.13, w-0.16, 0.22, 0.03, M.applGl, DT-0.01));
+    const gh=(dd.y1-dd.y0)*dd.glass;
+    toHinge(g, put(w/2, dd.y0+0.06+gh/2, w-0.34, gh, 0.03, M.applGl, DT-0.01));
+    const bar=new THREE.Mesh(new THREE.CylinderGeometry(F(0.05),F(0.05),F(w-0.22),14),M.appl);
+    bar.rotation[alongX?'z':'x']=Math.PI/2;
+    setDoorHandle(g, toHinge(g, alongX ? place(bar, x+w/2, dd.y1-0.38, z+out*(DT+0.13))
+                      : place(bar, x+out*(DT+0.13), dd.y1-0.38, z+w/2)));
+  }
+  put(w/2, 5.78, w-0.2, 0.34, 0.03, M.applGl, DT-0.02);         // control panel
+}
 function wallOven(x,z,w,hEach,y0,alongX=true,out=1){
   const DT=0.12, GAP=0.10;
   const put=(u,y,uw,h,dep,mat,off)=>{
@@ -871,10 +905,24 @@ function dishwasher(x,z,w=2,alongX=true,out=1){
   toHinge(g, put(w/2, H-CTL/2, w-0.05, CTL, DT*0.85, M.applGl, 0.02));  // control ledge
   const bar=new THREE.Mesh(new THREE.CylinderGeometry(F(0.045),F(0.045),F(w-0.35),14),M.appl);
   bar.rotation[alongX?'z':'x']=Math.PI/2;
-  toHinge(g, alongX ? place(bar, x+w/2, H-CTL-0.10, z+out*(DT+0.12))
-                    : place(bar, x+out*(DT+0.12), H-CTL-0.10, z+w/2));
+  setDoorHandle(g, toHinge(g, alongX ? place(bar, x+w/2, H-CTL-0.10, z+out*(DT+0.12))
+                    : place(bar, x+out*(DT+0.12), H-CTL-0.10, z+w/2)));
 }
-function stool(x,z,alongX=true){ // backless wood saddle stool
+/* wrap a builder's output in a group the VR hands can pick up and slide */
+function asMovable(cx, cz, fn){
+  const m0 = world.children.length, s0 = solids.length;
+  fn();
+  const g = new THREE.Group();
+  g.position.set(F(cx), 0, F(cz));
+  for(const o of world.children.slice(m0)){ o.position.sub(g.position); g.add(o); }
+  world.add(g);
+  g.userData.mov = {sIdx: [], home: g.position.clone()};
+  for(let i=s0;i<solids.length;i++) g.userData.mov.sIdx.push(i);
+  movables.push(g);
+  return g;
+}
+function stool(x,z,alongX=true){ return asMovable(x,z,()=>stoolRaw(x,z,alongX)); }
+function stoolRaw(x,z,alongX=true){ // backless wood saddle stool
   if(alongX){
     place(box(1.5,0.16,0.85,matFit(M.wood,1.5,0.85,2.4)), x,2.05,z);
     for(const l of [[-0.55,-0.28],[0.55,-0.28],[-0.55,0.28],[0.55,0.28]])
@@ -887,7 +935,8 @@ function stool(x,z,alongX=true){ // backless wood saddle stool
     solid(x-0.5,z-0.8,1.0,1.6);
   }
 }
-function chair(x,z,facing){ // dining chair, facing ±x
+function chair(x,z,facing){ return asMovable(x,z,()=>chairRaw(x,z,facing)); }
+function chairRaw(x,z,facing){ // dining chair, facing ±x
   place(box(1.3,0.14,1.3,M.wood), x,1.5,z);
   for(const l of [[-0.5,-0.5],[0.5,-0.5],[-0.5,0.5],[0.5,0.5]])
     place(box(0.1,1.45,0.1,M.woodDk), x+l[0],0.75,z+l[1]);
@@ -960,8 +1009,8 @@ function pendant(x,z,y=6.5){
   const mesh=(g,mat)=>new THREE.Mesh(g,mat);
   const fm = M.lamp, style = FIN.lampStyle || 'lantern';
   const H=1.1, Wd=0.8, B=0.09;
-  const cord=mesh(new THREE.CylinderGeometry(F(0.045),F(0.045),F(CEIL-y-H),8),fm);
-  pput(cord,x,(CEIL+y+H)/2,z);
+  const cord=mesh(new THREE.CylinderGeometry(F(0.045),F(0.045),F(KCEIL-y-H),8),fm);
+  pput(cord,x,(KCEIL+y+H)/2,z);
   if(style==='lantern'){
     for(const cnr of [[-1,-1],[1,-1],[-1,1],[1,1]])
       pput(box(B,H,B,fm), x+cnr[0]*Wd/2, y+H/2, z+cnr[1]*Wd/2);
@@ -989,9 +1038,9 @@ function pendant(x,z,y=6.5){
   const bulb=mesh(new THREE.SphereGeometry(F(0.15),10,10),M.lightE);
   pput(bulb,x,y+H*0.46,z);
 }
-function recessed(x,z){
+function recessed(x,z,cy=CEIL){
   const d=new THREE.Mesh(new THREE.CylinderGeometry(F(0.28),F(0.28),F(0.03),16),M.lightE);
-  place(d,x,CEIL-0.03,z);
+  place(d,x,cy-0.03,z);
 }
 function nookTable(cx,cz,alongX){
   const geo=new THREE.CylinderGeometry(F(1),F(1),F(0.15),28);
@@ -1075,18 +1124,32 @@ function buildShared(opt){
   const gr = new THREE.Mesh(new THREE.PlaneGeometry(F(140),F(140)), M.grass);
   gr.rotation.x=-Math.PI/2; gr.receiveShadow=true;
   place(gr, 8, -1.5, 16);
-  const fl = new THREE.Mesh(new THREE.PlaneGeometry(F(ZONE_W+DIN_W),F(SOUTH)), M.floor);
+  const fl = new THREE.Mesh(new THREE.PlaneGeometry(F(1),F(1)), M.floor);
   fl.rotation.x=-Math.PI/2; fl.receiveShadow=true;
-  place(fl,(ZONE_W+DIN_W)/2,0.001,SOUTH/2);
+  fl.visible=false; world.add(fl);
+  // Interior flooring only where there is interior: it used to be one big
+  // rectangle that ran out under the family wall and onto the deck.
+  const flr=(x0,z0,x1,z1)=>{
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(F(x1-x0),F(z1-z0)), M.floor);
+    m.rotation.x=-Math.PI/2; m.receiveShadow=true;
+    place(m,(x0+x1)/2,0.001,(z0+z1)/2);
+  };
+  flr(0,0, 32.74, ZONE_D+WALL_T);          // kitchen + dining band
+  flr(32.74,ENT_NZ, ENT_E, ZONE_D+WALL_T); // entry (its north wall jogs south)
+  flr(FAM_X,ZONE_D, ENT_E, DIN_S_FACE+0.6);// passage + dining south + hall
+  flr(FAM_X,DIN_S_FACE, ZONE_W, SOUTH);    // family room
+  flr(33.08,DIN_S_FACE, ENT_E, 20.0);      // hall stub to the bath block
   const dk = new THREE.Mesh(new THREE.PlaneGeometry(F(DECK_W+3.2),F(FAM_D)), M.deck);
   dk.rotation.x=-Math.PI/2; dk.receiveShadow=true;
   place(dk, DECK_X-3.0+ (DECK_W+3.2)/2 +3.0/2, -0.12, ZONE_D+FAM_D/2);
   place(box(DECK_W+3,1.4,FAM_D,M.rail), DECK_X+DECK_W/2-1.5, -0.85, ZONE_D+FAM_D/2).receiveShadow=true;
 
   // ceiling over kitchen zone + dining
-  const ce = new THREE.Mesh(new THREE.PlaneGeometry(F(ZONE_W+DIN_W),F(ZONE_D)), M.ceil);
+  const ce = new THREE.Mesh(new THREE.PlaneGeometry(F(ZONE_W),F(ZONE_D)), M.ceil);
   ce.rotation.x=Math.PI/2; ce.castShadow=true;
-  place(ce,(ZONE_W+DIN_W)/2,CEIL,ZONE_D/2);
+  place(ce,ZONE_W/2,KCEIL,ZONE_D/2);
+  const ceD = new THREE.Mesh(new THREE.PlaneGeometry(F(ENT_E+0.5-ZONE_W),F(ZONE_D)), M.ceil);
+  ceD.rotation.x=Math.PI/2; place(ceD,(ZONE_W+ENT_E+0.5)/2,CEIL,ZONE_D/2);
   // family room: vaulted whitewashed-plank ceiling, ridge N-S at room
   // center (~13'-6"), eaves at 10', dark faux beams following the slopes
   const RX=FAM_XWI+FAM_WV/2, RH=13.5, EH=10;
@@ -1100,8 +1163,8 @@ function buildShared(opt){
   }
   // gables run wall-face to wall-face so the slopes have something to die into
   const GW=FAM_XE-FAM_XW, GX=(FAM_XW+FAM_XE)/2;
-  place(box(GW,5.2,0.45,M.wall), GX, 11.5, ZONE_D+0.05);        // north gable
-  place(box(GW,5.2,0.45,M.wall), GX, 11.5, SOUTH-0.05);         // south gable
+  place(box(GW,6.3,0.45,M.wall), GX, 11.05, ZONE_D+WALL_T/2);   // north gable, down to the 8' kitchen ceiling
+  place(box(GW,5.2,0.45,M.wall), GX, 11.5, SOUTH+WALL_T/2);     // south gable
   place(box(0.6,0.8,FAM_D,M.beam), RX, RH-0.3, ZONE_D+FAM_D/2); // ridge beam
   for(let j=1;j<5;j++){
     const bz=ZONE_D+j*FAM_D/5;
@@ -1116,16 +1179,17 @@ function buildShared(opt){
 
   // ---- kitchen zone shell ----
   // west exterior wall w/ 6'x3' sliding window
-  wallSeg(0,0, ZONE_D, false, [{o:3.0,w:6.0,sill:3.0,head:6.0,shade:true}]);
+  wallSeg(-WALL_T/2,0, ZONE_D, false, [{o:3.0,w:6.0,sill:3.0,head:6.0,shade:true}]);
   // south-west kitchen wall with OPEN exterior door to the deck (dog door leaf swung out)
-  wallSeg(0,ZONE_D, 3.0, true, []);
-  wallSeg(6.0,ZONE_D, 0.6, true, []);
-  place(box(3.0,CEIL-6.7,WALL_T,M.wall), 4.5,(CEIL+6.7)/2, ZONE_D); // header over door
-  const leaf = box(0.16,6.6,3.0,M.door);      // door leaf: east hinge, swings out
-  place(leaf, 5.94, 3.3, ZONE_D+1.6);          // open along east jamb onto the deck
-  place(box(0.2,1.2,1.1,M.black), 5.94, 1.0, ZONE_D+1.55); // dog door
-  place(box(0.1,0.06,0.5,M.black), 5.82, 3.1, ZONE_D+2.9);  // lever
-  solid(5.76,ZONE_D,0.36,3.15);
+  wallSeg(0,ZONE_D+WALL_T/2, 3.0, true, []);
+  wallSeg(6.0,ZONE_D+WALL_T/2, 0.6, true, []);
+  place(box(3.0,CEIL-6.7,WALL_T,M.wall), 4.5,(CEIL+6.7)/2, ZONE_D+WALL_T/2); // header over door
+  // deck door: hinged at the east jamb, dog door and lever ride the leaf.
+  // Ships open (DOORS default) to match how the house actually lives.
+  const gDK=hinge('deck-kit', 6.0, 0.05, ZONE_D+WALL_T/2, 'y', 1.52);
+  toHinge(gDK, place(box(3.0,6.6,0.16,M.door), 4.5, 3.3, ZONE_D+WALL_T/2));
+  toHinge(gDK, place(box(1.1,1.2,0.2,M.black), 4.55, 1.0, ZONE_D+WALL_T/2));
+  setDoorHandle(gDK, toHinge(gDK, place(box(0.5,0.06,0.1,M.black), 3.25, 3.1, ZONE_D+WALL_T/2-0.12)));
   // The L-shaped pet corral that used to stand in this corner (2'-0" x 1'-4",
   // drawn on the sheet by the dog door) is removed at Jim's request — it read as
   // a stray stub wall in the room. The dog door itself stays. To restore it:
@@ -1155,9 +1219,9 @@ function buildShared(opt){
   place(box(0.12,6.7,1.2,M.glass), FAM_X, 3.45, nz+4.8);        // sidelite S
   solid(FAM_X-WALL_T/2, nz, WALL_T, 1.2);
   solid(FAM_X-WALL_T/2, nz+4.2, WALL_T, 1.2);
-  place(box(3.0,6.7,0.14,M.glass), FAM_X-1.5, 3.4, nz+4.13);    // door leaf, swung out
-  place(box(0.5,0.06,0.1,M.black), FAM_X-2.72, 3.1, nz+4.07);   // lever on the free edge
-  solid(FAM_X-3.05, nz+3.95, 3.05, 0.4);
+  const gDF=hinge('deck-famN', FAM_X, 0.05, nz+4.2, 'y', 1.52);
+  toHinge(gDF, place(box(0.14,6.7,3.0,M.glass), FAM_X, 3.4, nz+2.7));
+  setDoorHandle(gDF, toHinge(gDF, place(box(0.1,0.06,0.5,M.black), FAM_X-0.12, 3.1, nz+1.45)));
   place(box(0.1,2.4,5.4,M.glass), FAM_X, 8.2, nz+2.7);          // transom
   place(box(0.26,0.2,5.6,M.trimW), FAM_X, 9.45, nz+2.7);
   place(box(0.26,0.2,5.6,M.trimW), FAM_X, 6.95, nz+2.7);
@@ -1186,7 +1250,7 @@ function buildShared(opt){
   for(const mz of [0,1.6,4.7,6.4]) place(box(0.26,7.0,0.22,M.trimW), FAM_X, 3.5, sz+mz);
   // family south wall; east wall starts at the bath block (leaves the
   // passage into dining between z=PASS_Z0 and z=PASS_Z1)
-  wallSeg(FAM_XW,SOUTH, FAM_XE-FAM_XW, true, [], M.wall, FAM_H);
+  wallSeg(FAM_XW,SOUTH+WALL_T/2, FAM_XE-FAM_XW, true, [], M.wall, FAM_H);
   wallSeg(ZONE_W+WALL_T/2,PASS_Z1, SOUTH+WALL_T/2-PASS_Z1, false,
           [{o:PAN_Z0-PASS_Z1, w:PAN_Z1-PAN_Z0, sill:0, head:PAN_H, noGlass:true}],
           M.wall, FAM_H);
@@ -1206,39 +1270,81 @@ function buildShared(opt){
     place(box(3.0,0.35,1.1,M.deck), DECK_X-1.6, -0.35-s*0.35, ZONE_D+1.0+s*1.1);
   }
 
-  // ---- dining (extends south to the bath/pantry block at z=PASS_Z1) ----
-  wallSeg(ZONE_W,0, DIN_W+0.75, true, []);                    // north wall over dining
-  wallSeg(ZONE_W+DIN_W+WALL_T,0, PASS_Z1, false, [{o:3,w:5,sill:3,head:7}]); // east outer
-  wallSeg(ZONE_W,DIN_S, DIN_W+0.75, true, []);                  // bath/pantry block wall
-  const cd = new THREE.Mesh(new THREE.PlaneGeometry(F(DIN_W),F(DIN_S_FACE-ZONE_D)), M.ceil);
+  // ---- dining + (E) ENTRY ----
+  // The old model closed the dining with an invented east wall; line-scans show
+  // nothing there. The dining opens east into the entry: north wall jogs south
+  // to z=2.02 with a glazed band + front door, east wall at x=40.90 with a
+  // window, and the stair (8 treads, z 7.0..13.4) behind a wall at x=37.7.
+  wallSeg(ZONE_W,-WALL_T/2, 32.74-ZONE_W, true, []);          // north wall over dining
+  wallSeg(ZONE_W,DIN_S, DIN_W+0.75, true, []);                // bath/pantry block wall
+  wallSeg(37.71,DIN_S, ENT_E+WALL_T/2+0.22-37.71, true, []);  // entry SE closure
+  // entry north band: stubs, front door, sidelites, header
+  wallSeg(32.74,1.80, 1.52, true, []);
+  wallSeg(40.24,1.80, 1.32, true, []);
+  place(box(40.24-34.26,CEIL-6.9,WALL_T,M.wall), (40.24+34.26)/2,(CEIL+6.9)/2, 1.80);
+  for(const [gx0,gx1] of [[34.26,36.2],[39.2,40.24]]){
+    place(box(gx1-gx0,6.7,0.10,M.glass), (gx0+gx1)/2, 3.5, 1.80).castShadow=false;
+    place(box(gx1-gx0,0.2,0.3,M.trimW), (gx0+gx1)/2, 6.85, 1.80);
+  }
+  const gED=hinge('entry-door', 39.2, 0.05, 1.80, 'y', 1.5);
+  toHinge(gED, place(box(3.0,6.7,0.15,M.door), 37.7, 3.4, 1.80));
+  setDoorHandle(gED, toHinge(gED, place(box(0.1,0.06,0.5,M.black), 36.45, 3.1, 1.98)));
+  solid(34.26,1.58,5.98,0.44);
+  // east wall with a window
+  wallSeg(ENT_E+WALL_T/2,1.58, DIN_S+WALL_T/2-1.58, false, [{o:2.6,w:3.0,sill:3.0,head:6.6,shade:true}]);
+  // stair: wall, treads rising south, stringer mass below
+  wallSeg(STAIR_X,6.5, DIN_S+WALL_T/2-6.5, false, [], M.wall, CEIL);
+  for(let s=0;s<8;s++){
+    const tz=7.0+s*0.92, ty=(s+1)*0.58;
+    place(box(ENT_E-STAIR_X-0.22,0.16,0.98,matFit(M.wood,3,1,2.2)),
+          (STAIR_X+0.22+ENT_E)/2, ty-0.08, tz+0.49);
+    place(box(ENT_E-STAIR_X-0.22,ty-0.16,0.98,M.trimW),
+          (STAIR_X+0.22+ENT_E)/2, (ty-0.16)/2, tz+0.49);
+  }
+  place(box(ENT_E-STAIR_X-0.22,0.16,2.2,matFit(M.wood,3,2,2.2)),
+        (STAIR_X+0.22+ENT_E)/2, 4.64-0.08, 14.36+1.1);        // landing
+  place(box(ENT_E-STAIR_X-0.22,4.48,2.2,M.trimW),
+        (STAIR_X+0.22+ENT_E)/2, 2.24, 14.36+1.1);
+  solid(STAIR_X,7.0, ENT_E-STAIR_X, DIN_S-7.0);
+  // hall to the bath block: cap it with a wall + closed door face
+  wallSeg(33.08,20.0, 37.71-33.08+WALL_T/2, true, []);
+  place(box(2.6,6.7,0.14,M.door), 35.3, 3.35, 19.7);
+  place(box(0.1,0.06,0.5,M.black), 34.25, 3.1, 19.62);
+  // ceilings
+  const cd = new THREE.Mesh(new THREE.PlaneGeometry(F(32.74-ZONE_W),F(DIN_S_FACE-ZONE_D)), M.ceil);
   cd.rotation.x=Math.PI/2; cd.castShadow=true;
-  place(cd,ZONE_W+DIN_W/2,CEIL,(DIN_S_FACE+ZONE_D)/2);
+  place(cd,(ZONE_W+32.74)/2,CEIL,(DIN_S_FACE+ZONE_D)/2);
+  const ce2 = new THREE.Mesh(new THREE.PlaneGeometry(F(ENT_E-32.74+WALL_T),F(DIN_S+1-ENT_NZ)), M.ceil);
+  ce2.rotation.x=Math.PI/2; ce2.castShadow=true;
+  place(ce2,(32.74+ENT_E)/2,CEIL,(ENT_NZ+DIN_S+1)/2);
   diningSet(ZONE_W+DIN_W/2, 6.8);
 
   // recessed ceiling lights, kitchen zone grid
-  [[3.5,3],[9,3],[15,3],[3.5,9],[9,9],[15,9],[18.5,6]].forEach(p=>recessed(p[0],p[1]));
+  [[3.5,3],[9,3],[15,3],[3.5,9],[9,9],[15,9],[18.5,6]].forEach(p=>recessed(p[0],p[1],KCEIL));
 }
 
 function buildOptionA(variant){
   // north wall: solid over counters, 3'x4' window near dining end
-  wallSeg(0,0, ZONE_W, true, [{o:17.0,w:3.0,sill:3.0,head:7.0,shade:true}]);
+  wallSeg(0,-WALL_T/2, ZONE_W, true, [{o:17.0,w:3.0,sill:3.0,head:7.0,shade:true}]);
   // north run: counter with cooktop, then 2' oven cabinet at the end of the
   // 10'-5" segment, REF in the 3'-2" bay, shallow pantry in the 3'-0" bay
-  counter(0.25,0.25, 8.15, 2.08);
-  shakerRun(0.25,2.33, 8.15, true, 1);
+  counter(0.25,0.25, 7.42, 2.08);
+  shakerRun(0.25,2.33, 7.42, true, 1);
   cooktop(4.6,0.35);
   upper(0.25,0.15, 3.6, 1.15);
   // plaster hood with oak band + subway backsplash
-  place(box(3.0,2.3,1.5,M.cab), 5.9,6.95,0.95);
+  place(box(3.0,1.9,1.5,M.cab), 5.9,6.85,0.95);
   place(box(3.2,0.45,1.65,matFit(M.wood,3.2,0.45,2.2)), 5.9,5.7,0.95);
-  const bsA=new THREE.Mesh(new THREE.PlaneGeometry(F(8.1),F(3.2)),M.tile);
-  place(bsA, 4.4, 4.55, 0.26);
+  const bsA=new THREE.Mesh(new THREE.PlaneGeometry(F(7.4),F(3.2)),M.tile);
+  place(bsA, 4.0, 4.55, 0.26);
   outlet(2.3,0.30,3.6,true); outlet(7.7,0.30,3.6,true);
   outlet(0.30,10.4,3.6,false);
   outlet(21.04,4.6,2.75,false); outlet(21.04,8.5,2.75,false);
-  // oven tall cabinet, 2'-0" at end of counter run
-  tallCab(8.4,0.25, 2.02, 2.3);
-  wallOven(8.49,2.55, 1.84, 1.75, 1.7);               // double-oven stack
+  // Oven tower, widened bay: the drawn 2'-0" cab only fits a 24" oven, which
+  // is why the old double stack read small. Bay is now 2'-9" (stolen from the
+  // counter run) holding a 30" oven with a 30" microwave/convection above.
+  tallCab(7.67,0.25, 2.75, 2.3);
+  ovenTower(7.795,2.55, 2.5, true, 1);
   // fridge in the 3'-2" bay
   fridge(10.55,0.25, 3.0, 2.4);
   if(variant === 'morning') morningStation(13.58, 0.25, 3.0, 1.35);
@@ -1267,24 +1373,27 @@ function buildOptionA(variant){
   // island 8' x 3'-2": faces 3'-6" clear of west & north counters (per plan),
   // countertop flush on work sides, 1' seating overhang on the south only
   const IB = finish==='navy' ? M.cabIslNavy : M.cabIslOak;
-  const ix=5.83, iz=5.83;
-  place(box(7.6,BASE_H,2.1,matFit(IB,7.6,BASE_H,3.2)), ix+4,BASE_H/2, iz+1.12); // cabinet base
-  shakerRun(ix+0.2,iz+0.07, 7.6, true, -1, IB);          // working-side doors
-  shakerRun(ix+0.2,iz+2.17, 7.6, true, 1, IB);           // back panel detail
-  shakerRun(ix+0.2,iz+0.07, 2.1, false, -1, IB);         // west end
-  shakerRun(ix+7.8,iz+0.07, 2.1, false, 1, IB);          // east end
-  place(box(8.0,0.2,3.17,matFit(M.top,8,3.17,6)), ix+4,CT_H-0.1, iz+1.585); // countertop
-  solid(ix,iz,8.0,3.17);
-  for(let i=0;i<4;i++) stool(ix+1.15+i*1.9, iz+2.9);     // tucked under 12" overhang
-  pendant(ix+1.7, iz+1.4); pendant(ix+4, iz+1.4); pendant(ix+6.3, iz+1.4);
+  // 7'-9" x 3'-0" (was 8'-0" x 3'-2"): the walkability audit's fix. North face
+  // holds the plan's 42" aisle; the shave comes off the west end (west aisle
+  // 40.8"->42.6") and the east end (nook gap +3"), depth off the seating side.
+  const ix=5.98, iz=5.83;
+  place(box(7.35,BASE_H,1.93,matFit(IB,7.35,BASE_H,3.2)), ix+3.875,BASE_H/2, iz+1.035);
+  shakerRun(ix+0.2,iz+0.07, 7.35, true, -1, IB);         // working-side doors
+  shakerRun(ix+0.2,iz+2.00, 7.35, true, 1, IB);          // back panel detail
+  shakerRun(ix+0.2,iz+0.07, 1.93, false, -1, IB);        // west end
+  shakerRun(ix+7.55,iz+0.07, 1.93, false, 1, IB);        // east end
+  place(box(7.75,0.2,3.0,matFit(M.top,7.75,3.0,6)), ix+3.875,CT_H-0.1, iz+1.5);
+  solid(ix,iz,7.75,3.0);
+  for(let i=0;i<4;i++) stool(ix+1.05+i*1.85, iz+2.72);   // tucked under the overhang
+  pendant(ix+1.6, iz+1.4); pendant(ix+3.87, iz+1.4); pendant(ix+6.15, iz+1.4);
   // nook: built-in L banquette (east + north return), trestle table, chairs
   // U-banquette, all 1'-6" deep, line-scanned off the sheet: north bench runs
   // under the 3' window from the pantry cabinet east to the dining wall, east
   // bench down the dining wall, south return closes the U. The table sits flush
   // to the north and south benches, so both ends are comfortable seats.
   banquette(16.61, 0.0,   2.98, 1.51);       // north, under the window
-  banquette(19.59, 1.51,  1.50, 8.50);       // east, along the dining wall
-  banquette(17.59, 10.01, 3.50, 1.50);       // south return
+  banquette(19.59, 1.51,  1.50, 9.90);       // east: runs on past the table end
+  // (the old south L-return is gone — Jim wanted the bench to just keep going)
   for(const pz of [3.2,5.4,7.6]) place(box(0.34,0.92,1.15,M.pillow), 20.72,2.02,pz).rotation.z=-0.16;
   place(box(2.6,0.9,0.34,M.pillow), 18.1,2.02,0.52);
   trestleTable(18.41, 5.75, 2.0, 8.4);       // capsule x17.41..19.41, z1.55..9.95
@@ -1339,8 +1448,9 @@ function buildOptionB(){
   toHinge(gRange, place(box(0.04,1.30,2.02,M.applGl), ZONE_W-2.23, 1.30, 4.95));  // oven door glass
   place(box(0.04,0.30,2.10,M.applGl), ZONE_W-2.23, 2.66, 4.95);  // control panel
   const rbar=new THREE.Mesh(new THREE.CylinderGeometry(F(0.05),F(0.05),F(2.2),14),M.appl);
-  rbar.rotation.x=Math.PI/2; place(rbar, ZONE_W-2.34, 2.24, 4.95); // handle
-  place(box(1.5,2.1,2.2,M.cab), ZONE_W-1.05,7.05,4.95);   // plaster hood
+  rbar.rotation.x=Math.PI/2;
+  setDoorHandle(gRange, toHinge(gRange, place(rbar, ZONE_W-2.34, 2.24, 4.95))); // handle
+  place(box(1.5,1.7,2.2,M.cab), ZONE_W-1.05,6.95,4.95);   // plaster hood
   place(box(1.7,0.4,2.4,matFit(M.wood,2.4,0.4,2.2)), ZONE_W-1.15,5.9,4.95); // oak band
   // backsplash breaks around the window over the sink — a full-height panel here
   // was covering the 3'x3' opening entirely
@@ -1452,8 +1562,8 @@ function init(){
   renderer.setAnimationLoop(animate);   // must drive the loop; rAF never fires in XR
 }
 function buildOption(key){
-  if(world) scene.remove(world);
-  world = new THREE.Group(); solids = []; openables = [];
+  if(world){ scene.remove(world); disposeWorld(world); }
+  world = new THREE.Group(); solids = []; openables = []; movables = [];
   buildShared(key); OPTS[key].build();
   scene.add(world);
   applyFinishes();          // colours survive an A/B or finish rebuild
@@ -1503,6 +1613,7 @@ function addEvents(){
   document.getElementById('btnA2').onclick=()=>switchOpt('A2');
   document.getElementById('btnFamA').onclick=()=>switchFam('A');
   document.getElementById('btnFamB').onclick=()=>switchFam('B');
+  document.getElementById('btnFamB2').onclick=()=>switchFam('B2');
   document.getElementById('btnWalk').onclick=()=>setView('walk');
   document.getElementById('btnOver').onclick=()=>setView('over');
   document.getElementById('btnPlan').onclick=()=>setView('plan');
@@ -1590,7 +1701,7 @@ function switchFam(k){
 function syncLayoutUI(){
   const set=(id,on)=>{ const b=document.getElementById(id); if(b) b.classList.toggle('on',on); };
   set('btnA', current==='A'); set('btnA2', current==='A2'); set('btnB', current==='B');
-  set('btnFamA', famOpt==='A'); set('btnFamB', famOpt==='B');
+  set('btnFamA', famOpt==='A'); set('btnFamB', famOpt==='B'); set('btnFamB2', famOpt==='B2');
 }
 function setFinish(f){
   finish=f;
@@ -1659,7 +1770,7 @@ function collide(nx,nz){
     }
   }
   // outer clamp (includes the deck to the west)
-  nx=Math.max(F(DECK_X+0.6),Math.min(F(ZONE_W+DIN_W-0.8),nx));
+  nx=Math.max(F(DECK_X+0.6),Math.min(F(ENT_E-0.7),nx));
   nz=Math.max(F(0.8),Math.min(F(SOUTH-0.6),nz));
   return [nx,nz];
 }
@@ -1713,6 +1824,19 @@ function animate(time, frame){
   renderer.render(scene,camera);
 }
 
+const BASE_TEX = new Set();          // textures owned by the base palette
+function disposeWorld(g){
+  g.traverse(o=>{
+    if(o.geometry) o.geometry.dispose();
+    const m = o.material;
+    if(m && !Array.isArray(m) && m.userData &&
+       (m.userData.baseKey || m.userData.pinned)){
+      if(m.map && !BASE_TEX.has(m.map)) m.map.dispose();
+      m.dispose();
+    }
+  });
+}
+
 /* Build something in its own axis-aligned frame, then set it into the room
    rotated by a quarter turn about (px,pz). `q` counts clockwise quarter turns in
    plan (+x east, +z south, so clockwise is a negative Y rotation). A right-angle
@@ -1756,7 +1880,7 @@ function withYaw(q, px, pz, fn){
    that an A/B or finish change triggers. `openables` is the live list and is
    rebuilt with the world.
    ============================================================ */
-const DOORS = {};
+const DOORS = {'deck-kit':1, 'deck-famN':1};   // the two deck doors live open
 let openables = [];
 
 function hinge(name, hx, hy, hz, axis, openA, dir){
@@ -1784,7 +1908,9 @@ function applyDoor(g){
 }
 function updateOpenables(dt){
   for(const g of openables){
-    const d = g.userData.door, want = DOORS[d.name] ? 1 : 0;
+    const d = g.userData.door;
+    if(d.held) continue;                    // a hand owns it right now
+    const want = DOORS[d.name] || 0;        // fractional: doors stay where left
     if(Math.abs(d.t - want) < 0.0015){ if(d.t !== want){ d.t = want; applyDoor(g); } continue; }
     d.t += (want - d.t) * Math.min(1, dt*4.0);
     applyDoor(g);
@@ -1798,9 +1924,10 @@ function doorOf(obj){
 }
 function toggleDoor(g){
   const n = g.userData.door.name;
-  DOORS[n] = DOORS[n] ? 0 : 1;
+  DOORS[n] = (DOORS[n]||0) > 0.5 ? 0 : 1;
   return !!DOORS[n];
 }
+function setDoorHandle(g, mesh){ g.userData.door.handle = mesh; return mesh; }
 /* tap handling shared by the mouse and by a short pinch in VR */
 function tapAt(){
   if(!world) return null;
@@ -1840,7 +1967,8 @@ function bifold(name, xFace, zJamb, zEnd, H){
   const B = hinge(name, xFace, 0, zJamb + dir*half, 'y', 2.64*dir);
   bifoldLeaf(B, xFace, zJamb + dir*half, zEnd, H);
   const k = new THREE.Mesh(new THREE.SphereGeometry(F(0.075),10,10), M.brass);
-  toHinge(B, place(k, xFace - 0.06, H*0.44, zEnd - dir*0.28));
+  setDoorHandle(B, toHinge(B, place(k, xFace - 0.06, H*0.44, zEnd - dir*0.28)));
+  setDoorHandle(A, B.userData.door.handle);
   foldInto(A, B);
   return A;
 }
@@ -1901,7 +2029,7 @@ function famRug(cx, cz, w, d){
 function buildFamily(){
   const EAST = ZONE_W, SOUTHI = SOUTH - WALL_T/2;   // interior wall faces
   const L = 8.667, D = 3.333;
-  if(famOpt === 'B'){
+  if(famOpt === 'B' || famOpt === 'B2'){
     // The footprint is square, so rotating about its own centre leaves the
     // square exactly where it is and only swings the L round inside it.
     const x0 = EAST - L, z0 = SOUTHI - L;
@@ -1910,6 +2038,16 @@ function buildFamily(){
     // straight through it. Bottom of the screen now clears it by ~6".
     tv(6.64, 23.97, 6.30, 65, false, 1);            // 65" on the chimney face
     famRug(12.2, 26.6, 7, 8);
+    if(famOpt === 'B2'){
+      // B-prime: a kitchen table in the open ground between kitchen and family
+      const tx=13.9, tz=14.2;
+      place(box(4.0,0.16,2.3,matFit(M.wood,4,2.3,1.6)), tx, 2.48, tz);
+      for(const [lx,lz] of [[-1.7,-0.85],[1.7,-0.85],[-1.7,0.85],[1.7,0.85]])
+        place(box(0.18,2.4,0.18,M.woodDk), tx+lx, 1.2, tz+lz);
+      solid(tx-2.0, tz-1.15, 4.0, 2.3);
+      chair(tx-2.75, tz-0.55, 1); chair(tx-2.75, tz+0.55, 1);
+      chair(tx+2.75, tz-0.55, -1); chair(tx+2.75, tz+0.55, -1);
+    }
   } else {
     sectional(EAST - L, 22.0, L, D, M.sofa);
     tv(13.7, SOUTH-WALL_T/2, 3.75, 85, true, -1);   // 85" on the south wall
@@ -2035,6 +2173,7 @@ let DEFAULTS = null;            // captured once, after convertPBR
 function finInit(){
   M.lamp.side = THREE.DoubleSide;          // open dome / cone shades read as solid
   M.lamp.color.copy(M.frame.color);        // matches the old finish-linked default
+  for(const k in M){ const m=M[k]; if(m && m.map) BASE_TEX.add(m.map); }
   DEFAULTS = {};
   for(const k in M){
     const m = M[k]; if(!m || !m.color) continue;
@@ -2133,6 +2272,7 @@ function applyStyles(){
   if(!FIN.top) m.color.copy(new THREE.Color(t.color).convertSRGBToLinear());
   const cv = TEX[t.tex];
   if(cv){
+    if(m.map && !BASE_TEX.has(m.map)) m.map.dispose();
     const tx = new THREE.CanvasTexture(cv);
     tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
     tx.encoding = THREE.sRGBEncoding;
@@ -2216,7 +2356,7 @@ function readURL(){
     if(key.startsWith('s.')){ FIN.styles = FIN.styles||{}; FIN.styles[key.slice(2)] = val; }
     else if(key.startsWith('i.')){ FIN.inst = FIN.inst||{}; FIN.inst[decodeURIComponent(key.slice(2))] = decSw(val); }
     else if(key === 'kit'){ if(OPTS[val]) current = val; }
-    else if(key === 'fam'){ if(val==='A'||val==='B') famOpt = val; }
+    else if(key === 'fam'){ if(val==='A'||val==='B'||val==='B2') famOpt = val; }
     else if(KINDS[key]) FIN[key] = decSw(val);
   }
   _urlLock = false;
@@ -2407,6 +2547,7 @@ const _v = new THREE.Vector3(), _q = new THREE.Quaternion(),
    z=ZONE_D, so from here the opening through to the island and the north run
    is wide open. yaw 0 == facing north. */
 const XR_SPAWN = {x:13.5, z:19.5, yaw:0};
+const ENT_E=40.90, ENT_NZ=2.02, STAIR_X=37.71;  // entry, line-scanned
 
 /* ---- head pose, in rig-local (reference) space, straight from the frame ---- */
 const headPos = new THREE.Vector3(), headQuat = new THREE.Quaternion();
@@ -2497,6 +2638,9 @@ function setupXR(){
       yaw = Math.atan2(-_v.x, -_v.z); pitch = 0;
     }
     cancelAim();
+    endDoorGrab(); endMovGrab();
+    if(avatar) avatar.visible = false;
+    iconPool.forEach(s=>s.visible=false);
     if(panel) panel.visible = false;
     xrCtrls.forEach(c=>{ if(c.userData.hmesh) c.userData.hmesh.visible = false; });
     rig.position.set(0,0,0); rig.rotation.set(0,0,0);
@@ -2532,6 +2676,7 @@ function updateHand(c, frame){
     return null;
   }
   const im = handMesh(c);
+  if(!c.userData.tipV){ c.userData.tipV=new THREE.Vector3(); c.userData.wristV=new THREE.Vector3(); }
   let any=false, tip=null, wrist=null;
   for(let i=0;i<HAND_JOINTS.length;i++){
     const j  = src.hand.get(HAND_JOINTS[i]);
@@ -2542,8 +2687,8 @@ function updateHand(c, frame){
     _v2.set(p.x,p.y,p.z); _q2.set(o.x,o.y,o.z,o.w);
     _m.compose(_v2, _q2, _s.setScalar(Math.max(jp.radius||0.008, 0.006)));
     im.setMatrixAt(i,_m);
-    if(i===J_TIP)   tip   = _v2.clone();
-    if(i===J_WRIST) wrist = _v2.clone();
+    if(i===J_TIP)   tip   = c.userData.tipV.copy(_v2);
+    if(i===J_WRIST) wrist = c.userData.wristV.copy(_v2);
   }
   im.instanceMatrix.needsUpdate = true;
   im.visible = any;
@@ -2653,7 +2798,7 @@ function panelItems(){
       {x:8+i*(BW5+6), y:BY5, w:BW5, h:50, label:label, sub:sub2, act:act, hot:hot});
     const kd = current==='A2' ? 'A\u2032' : current;
     bar5(0,'KIT '+kd,'cycle kitchen', ()=>switchOpt(current==='A'?'A2':current==='A2'?'B':'A'));
-    bar5(1,'FAM '+famOpt,'swap family',   ()=>switchFam(famOpt==='A'?'B':'A'));
+    bar5(1,'FAM '+(famOpt==='B2'?'B\u2032':famOpt),'cycle family', ()=>switchFam(famOpt==='A'?'B':famOpt==='B'?'B2':'A'));
     bar5(2,'PLAN','sheet floor',  ()=>setPdfFloor(!pdfFloor), pdfFloor);
     bar5(3,'FINISH','recolour',   ()=>{ panelPage='edit'; pickMode=true; }, false);
     bar5(4,'EXIT','end session',  endVR);
@@ -2934,6 +3079,10 @@ function xrFrame(dt, frame){
   drawPanel();
 
   /* ---- pointer / teleport arc ---- */
+  updateHandleIcons();
+  updateDoorGrab();
+  updateMovGrab();
+  updateAvatar(dt);
   if(pickMode){
     if(pc) updatePickRay(pc); else cancelAim();
   } else if(holdCtrl){
@@ -2971,7 +3120,7 @@ function xrFrame(dt, frame){
    lectern floating below eye line that follows the head lazily, so it holds
    still while you look around and never ends up behind your arm. */
 let panelYaw = 0, panelReady = false;
-const PANEL_DIST = 0.54, PANEL_DROP = 0.33, PANEL_SLACK = 0.5;
+const PANEL_DIST = 0.55, PANEL_DROP = 0.36, PANEL_SLACK = 0.55, PANEL_ASIDE = 0.72;
 function placePanel(dt){
   const f = _v2.set(0,0,-1).applyQuaternion(headQuat); f.y = 0;
   const hy = (f.lengthSq() > 1e-6) ? Math.atan2(f.x, f.z) : panelYaw;
@@ -2982,14 +3131,191 @@ function placePanel(dt){
   // dead zone, then ease: it only re-aims once you have really turned away
   if(Math.abs(d) > PANEL_SLACK)
     panelYaw += Math.sign(d) * (Math.abs(d) - PANEL_SLACK) * Math.min(1, dt*2.5);
-  const tx = headPos.x + Math.sin(panelYaw)*PANEL_DIST;
-  const tz = headPos.z + Math.cos(panelYaw)*PANEL_DIST;
+  // parked off to the LEFT of where you look, not dead ahead
+  const py = panelYaw + PANEL_ASIDE;
+  const tx = headPos.x + Math.sin(py)*PANEL_DIST;
+  const tz = headPos.z + Math.cos(py)*PANEL_DIST;
   const ty = headPos.y - PANEL_DROP;
   if(!panel.userData.placed){ panel.position.set(tx,ty,tz); panel.userData.placed = true; }
   else panel.position.lerp(_v2.set(tx,ty,tz), Math.min(1, dt*7));
   panel.lookAt(headWorld(_v));
   panel.updateMatrix();
 }
+/* ---- handle affordance + grab-to-open ----
+   Near a handle (within a foot) a small ring lights up on it; pinch inside the
+   grab radius and it brightens and the door follows your hand — swing, slide or
+   drop mapped per hinge axis. Let go and the door stays exactly where you left
+   it (DOORS holds fractions now); the ring dims, and fades once you move away. */
+const NEAR_R = 0.3048, GRAB_R = 0.22;
+let iconDim=null, iconLit=null, iconPool=[], grabDoor=null, grabCtrl=null, grabRef={};
+let grabMov=null, movOff=new THREE.Vector3();
+function iconTex(fill){
+  const c=document.createElement('canvas'); c.width=c.height=64;
+  const g=c.getContext('2d');
+  g.strokeStyle='#c8a24a'; g.lineWidth=7;
+  if(fill){ g.fillStyle='rgba(200,162,74,0.95)'; g.beginPath(); g.arc(32,32,22,0,7); g.fill(); }
+  else { g.fillStyle='rgba(20,19,17,0.55)'; g.beginPath(); g.arc(32,32,22,0,7); g.fill(); }
+  g.beginPath(); g.arc(32,32,22,0,7); g.stroke();
+  const tx=new THREE.CanvasTexture(c); tx.encoding=THREE.sRGBEncoding; return tx;
+}
+function ensureIcons(){
+  if(iconPool.length) return;
+  iconDim=iconTex(false); iconLit=iconTex(true);
+  for(let i=0;i<5;i++){
+    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:iconDim, transparent:true, depthTest:false}));
+    s.scale.set(0.075,0.075,1); s.renderOrder=998; s.visible=false;
+    scene.add(s); iconPool.push(s);
+  }
+}
+const _hw=new THREE.Vector3(), _tw=new THREE.Vector3(), _tw2=new THREE.Vector3();
+function handTips(){
+  const tips=[];
+  for(const c of xrCtrls){
+    if(!c.userData.src) continue;
+    if(c.userData.isHand && c.userData.tipV)
+      tips.push({c, p:_tw.copy(c.userData.tipV).applyMatrix4(rig.matrixWorld).clone()});
+    else tips.push({c, p:c.getWorldPosition(new THREE.Vector3())});
+  }
+  return tips;
+}
+function updateHandleIcons(){
+  ensureIcons();
+  const tips=handTips();
+  headWorld(_hw);
+  const near=[];
+  for(const g of openables){
+    const h=g.userData.door.handle; if(!h) continue;
+    h.getWorldPosition(_tw2);
+    if(_tw2.distanceToSquared(_hw) > 4.4) continue;      // > ~2.1 m from head
+    let dmin=1e9;
+    for(const t of tips) dmin=Math.min(dmin, _tw2.distanceTo(t.p));
+    if(dmin < NEAR_R || grabDoor===g)
+      near.push({g, pos:_tw2.clone(), lit: grabDoor===g, d:dmin});
+  }
+  near.sort((a,b)=>a.d-b.d);
+  for(let i=0;i<iconPool.length;i++){
+    const s=iconPool[i], n=near[i];
+    if(!n){ s.visible=false; continue; }
+    s.position.copy(n.pos); s.position.y += 0.055;
+    s.material.map = n.lit ? iconLit : iconDim;
+    s.material.opacity = n.lit ? 1.0 : 0.85;
+    s.visible=true;
+  }
+}
+function nearestHandle(p){
+  let best=null, bd=GRAB_R;
+  for(const g of openables){
+    const h=g.userData.door.handle; if(!h) continue;
+    h.getWorldPosition(_tw2);
+    const d=_tw2.distanceTo(p);
+    if(d<bd){ bd=d; best=g; }
+  }
+  return best;
+}
+function nearestMovable(p){
+  let best=null, bd=0.38;
+  for(const g of movables){
+    _tw2.copy(g.position); _tw2.y=p.y;
+    const d=_tw2.distanceTo(p);
+    if(d<bd){ bd=d; best=g; }
+  }
+  return best;
+}
+function grabPoint(c){
+  if(c.userData.isHand && c.userData.tipV)
+    return _tw.copy(c.userData.tipV).applyMatrix4(rig.matrixWorld);
+  return c.getWorldPosition(_tw);
+}
+function startDoorGrab(c, g){
+  grabDoor=g; grabCtrl=c;
+  const d=g.userData.door;
+  d.held=true;
+  const p=grabPoint(c);
+  grabRef={t0:d.t, y0:p.y, p0:p.clone()};
+  if(d.axis==='y'){
+    grabRef.a0=Math.atan2(p.x-g.position.x, p.z-g.position.z);
+  }
+}
+function updateDoorGrab(){
+  if(!grabDoor) return;
+  const d=grabDoor.userData.door, p=grabPoint(grabCtrl);
+  let tt=d.t;
+  if(d.axis==='y'){
+    let da=Math.atan2(p.x-grabDoor.position.x, p.z-grabDoor.position.z)-grabRef.a0;
+    while(da>Math.PI) da-=2*Math.PI;
+    while(da<-Math.PI) da+=2*Math.PI;
+    tt=grabRef.t0 + da/d.open;
+  } else if(d.axis==='slide'){
+    tt=grabRef.t0 + _tw2.copy(p).sub(grabRef.p0).dot(d.dir)/Math.abs(d.open);
+  } else {
+    tt=grabRef.t0 + (grabRef.y0-p.y)/0.5;
+  }
+  d.t=Math.max(0,Math.min(1,tt));
+  DOORS[d.name]=d.t;
+  applyDoor(grabDoor);
+}
+function endDoorGrab(){
+  if(!grabDoor) return;
+  grabDoor.userData.door.held=false;
+  DOORS[grabDoor.userData.door.name]=grabDoor.userData.door.t;
+  grabDoor=null; grabCtrl=null;
+}
+function startMovGrab(c, g){
+  grabMov=g; grabCtrl=c;
+  movOff.copy(g.position).sub(grabPoint(c)); movOff.y=0;
+}
+function updateMovGrab(){
+  if(!grabMov) return;
+  const p=grabPoint(grabCtrl);
+  const nx=p.x+movOff.x, nz=p.z+movOff.z;
+  const dx=nx-grabMov.position.x, dz=nz-grabMov.position.z;
+  grabMov.position.x=nx; grabMov.position.z=nz;
+  for(const i of grabMov.userData.mov.sIdx){
+    const b=solids[i]; if(!b) continue;
+    b.x1+=dx; b.x2+=dx; b.z1+=dz; b.z2+=dz;
+  }
+}
+function endMovGrab(){ grabMov=null; grabCtrl=null; }
+
+/* ---- body avatar: a 200 lb frame under the headset so you can look down
+   and judge an aisle. Height comes from the real head height every frame. */
+let avatar=null, avYaw=0;
+function ensureAvatar(){
+  if(avatar) return avatar;
+  avatar=new THREE.Group();
+  const am=new THREE.MeshLambertMaterial({color:0x39404a, transparent:true, opacity:0.6});
+  const mk=(w,h,d)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), am);
+    m.castShadow=m.receiveShadow=false; avatar.add(m); return m; };
+  avatar.userData.torso=mk(0.48,1,0.27);       // shoulders 19", chest 10.5"
+  avatar.userData.hips=mk(0.43,0.22,0.27);
+  avatar.userData.legL=mk(0.17,1,0.19);
+  avatar.userData.legR=mk(0.17,1,0.19);
+  rig.add(avatar);
+  return avatar;
+}
+function updateAvatar(dt){
+  ensureAvatar();
+  avatar.visible=true;
+  const H=Math.max(1.1, headPos.y);
+  const hipY=0.50*H, shY=H-0.22;
+  const f=_tw2.set(0,0,-1).applyQuaternion(headQuat); f.y=0;
+  if(f.lengthSq()>1e-4){
+    const hy=Math.atan2(f.x,f.z);
+    let da=hy-avYaw;
+    while(da>Math.PI) da-=2*Math.PI;
+    while(da<-Math.PI) da+=2*Math.PI;
+    avYaw+=da*Math.min(1,dt*5);
+  }
+  avatar.position.set(headPos.x - Math.sin(avYaw)*0.06, 0, headPos.z - Math.cos(avYaw)*0.06);
+  avatar.rotation.y=avYaw;
+  const u=avatar.userData;
+  u.torso.scale.y=shY-hipY; u.torso.position.y=(shY+hipY)/2;
+  u.hips.position.y=hipY;
+  const legH=hipY-0.11;
+  u.legL.scale.y=legH; u.legL.position.set(-0.115, legH/2, 0);
+  u.legR.scale.y=legH; u.legR.position.set( 0.115, legH/2, 0);
+}
+
 /* the one hand that points and teleports - right if we have it */
 function pointerCtrl(){
   const live = xrCtrls.filter(c=>c.userData.src);
@@ -3035,6 +3361,11 @@ function onSelectStart(c){
   c.userData.mode = null;
   if(nearPanel(c) || panelRayPick(c) !== null){ c.userData.mode = 'ui'; return; }
   if(pickMode){ c.userData.mode = 'finish'; return; }
+  const gp2 = grabPoint(c).clone();
+  const hd = nearestHandle(gp2);
+  if(hd){ c.userData.mode='door'; startDoorGrab(c, hd); return; }
+  const mv = nearestMovable(gp2);
+  if(mv){ c.userData.mode='move'; startMovGrab(c, mv); return; }
   if(c === pointerCtrl() && nowMs() - teleAt > TELE_COOL){
     c.userData.mode = 'hold';
     holdCtrl = c;
@@ -3046,6 +3377,8 @@ function onSelectEnd(c){
   const mode = c.userData.mode;
   c.userData.mode = null;
   if(holdCtrl === c) holdCtrl = null;
+  if(mode === 'door'){ endDoorGrab(); return; }
+  if(mode === 'move'){ endMovGrab(); return; }
   if(mode === 'ui'){
     const i = panelRayPick(c);
     const j = (i === null || i < 0) ? panelPick(c.position) : i;
@@ -3101,7 +3434,7 @@ async function initVRButton(){
 const mapC = document.getElementById('map'), mg = mapC.getContext('2d');
 let mapBg=null;
 const MPAD=10, MW=220, MH=150;
-const MINX=DECK_X-3.2, SPANX=(ZONE_W+DIN_W)-MINX, SPANZ=SOUTH+1;
+const MINX=DECK_X-3.2, SPANX=41.4-MINX, SPANZ=SOUTH+1;
 function mx(ft){ return MPAD + (ft-MINX)*( (MW-2*MPAD)/SPANX ); }
 function mz(ft){ return MPAD + ft*( (MH-2*MPAD)/SPANZ ); }
 function drawMapStatic(){

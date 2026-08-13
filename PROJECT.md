@@ -363,6 +363,20 @@ Delivery: **https://jmartz.github.io/kitchen-viewer/** opened in the Quest Brows
   right hand — can teleport at all, with a 350 ms cooldown after each jump. The
   aim direction is low-passed because raw hand tracking makes the landing ring
   dance.
+- **L20 — a rebuilding scene leaks unless it disposes.** `buildOption` swapped the
+  world group but never freed it: ~600 geometries plus every matFit/steelFace texture
+  clone per rebuild, and the demo *is* rebuilds (A/B flips, finish styles). On the
+  Quest that read as "memory leak in VR": VRAM fills over tens of seconds, frame rate
+  dies, and hand tracking starves alongside. `disposeWorld()` frees geometry and
+  clone materials/maps (`BASE_TEX` guards the shared palette textures); measured
+  flat at 535 geometries across six rebuilds.
+- **L21 — dims measure interior faces, systematically.** Every perimeter wall was
+  centred ON its drawn face line, intruding WALL_T/2 = 2.7" into each room ("all the
+  walls seem a few inches off"). Same class as L6 but as a pattern: `wallSeg` centres
+  on its argument, so exterior walls take face±WALL_T/2. Line-scanned and fixed: west
+  0.00, north 0.00, kitchen south 12.17, family south 35.09. The invented dining east
+  wall is gone — the sheet shows the dining open east into the (E) entry (stair
+  treads z 7.0–13.4, east wall face x 40.90, north band jogged to z 2.02).
 - **L16 — an exception in the XR frame loop freezes the headset.** Not a dropped
   frame, not a console error you can ignore: the session stops being fed frames
   and the only way out is the Meta button and force-quit. A stale `PANEL_BTNS`
