@@ -125,6 +125,10 @@
   <div class="row2" style="margin-top:6px">
     <button id="btnFinish">Finishes</button>
   </div>
+  <div class="row2" style="margin-top:6px">
+    <button id="btnDay" class="on">Day</button>
+    <button id="btnNight">Night</button>
+  </div>
   <div style="margin-top:9px;font-size:10px;letter-spacing:.05em;color:rgba(245,242,236,.55)">
     LENS <span id="fovval" style="float:right;color:rgba(245,242,236,.8)">56&deg;</span></div>
   <input id="fov" type="range" min="42" max="75" value="56"
@@ -219,6 +223,11 @@ function makeMaterials(){
   M.frame  = new THREE.MeshLambertMaterial({color:0x2e2e2e});
   M.door   = new THREE.MeshLambertMaterial({color:0xf2f1ed});
   M.lightE = new THREE.MeshBasicMaterial({color:0xfff6dd});
+  // switchable fixture groups get their own materials so a wall switch can
+  // kill just its circuit
+  M.lightCan  = new THREE.MeshLambertMaterial({color:0xfff6e6, emissive:0xd9cba6});
+  M.lightPend = new THREE.MeshLambertMaterial({color:0xfff6e6, emissive:0xd9c79a});
+  M.lightUC   = new THREE.MeshLambertMaterial({color:0x4a4d52});
   // oak plank floor via canvas texture
   const c = document.createElement('canvas'); c.width=512; c.height=512;
   const g = c.getContext('2d');
@@ -540,6 +549,51 @@ function matFit(base,wFt,hFt,tileFt){
 let world, solids, lights;   // world group, collision boxes, decorative lights
 let movables = [];           // grabbable furniture (stools, chairs, the Coke)
 let fridgeLights = [];       // {mat, doors, t, on, lamp} — lit on a comic delay
+/* wall-switch circuits. fill/fill2 (the two warm interior point lights that
+   have always been in the scene) become the cans' and pendants' real light,
+   so at night the switches genuinely light the room. */
+const LIGHTS = { cans:{on:true}, pend:{on:true}, under:{on:false}, disp:{on:false} };
+const NIGHT = { on:false };
+let fillLight=null, fill2Light=null, hemiLight=null;
+let switchRockers = [];
+function lampMat(mat, on, glowHex){
+  mat.color.setHex(on ? 0xfff6e6 : 0x393d43);
+  mat.emissive.setHex(on ? glowHex : 0x000000);
+  mat.needsUpdate = true;
+}
+function applyLights(){
+  const n = NIGHT.on;
+  lampMat(M.lightCan,  LIGHTS.cans.on,  0xd9cba6);
+  lampMat(M.lightPend, LIGHTS.pend.on,  0xd9c79a);
+  lampMat(M.lightUC,   LIGHTS.under.on, 0xd9b878);
+  if(fillLight)  fillLight.intensity  = LIGHTS.cans.on ? (n?1.25:0.5) : 0;
+  if(fill2Light) fill2Light.intensity = LIGHTS.pend.on ? (n?1.05:0.4) : 0;
+  for(const r of switchRockers)
+    r.mesh.rotation[r.alongX?'x':'z'] = (LIGHTS[r.key] && LIGHTS[r.key].on) ? -0.22 : 0.22;
+}
+function toggleLightGroup(key){
+  if(!LIGHTS[key]) return;
+  LIGHTS[key].on = !LIGHTS[key].on;
+  applyLights();
+  return LIGHTS[key].on;
+}
+function setNight(v){
+  NIGHT.on = v;
+  if(v){ LIGHTS.cans.on = LIGHTS.pend.on = LIGHTS.under.on = true; }
+  if(sunLight){
+    sunLight.intensity = v ? 0.05 : 2.3;
+    sunLight.color.setHex(v ? 0x9db4d6 : 0xfff0da);
+  }
+  if(hemiLight) hemiLight.intensity = v ? 0.07 : 0.32;
+  scene.background.setHex(v ? 0x131a2b : 0xcfe0ea).convertSRGBToLinear();
+  scene.fog.color.copy(scene.background);
+  renderer.toneMappingExposure = v ? 0.92 : 1.0;
+  const bd=document.getElementById('btnDay'), bn=document.getElementById('btnNight');
+  if(bd){ bd.classList.toggle('on',!v); bn.classList.toggle('on',v); }
+  panelKey='';
+  applyLights();
+  syncURL();
+}
 let fridgeLamp = null;       // one real PointLight, parked in whichever fridge is built
 
 function box(w,h,d, mat){
@@ -671,13 +725,16 @@ function bayDrawer(name, x, z, alongX, out, D, u0, w, y0, y1, mat, px, py, pz){
 }
 
 /* wall light switch: plate + rocker(s), gang-able. Caller gives the face pos. */
-function lightSwitch(x,z,y,alongX,gang=1){
+function lightSwitch(x,z,y,alongX,gang=1,keys){
   const w=0.32*gang;
   place(alongX?box(w,0.46,0.05,M.trimW):box(0.05,0.46,w,M.trimW), x,y,z).castShadow=false;
   for(let i=0;i<gang;i++){
     const off=(i-(gang-1)/2)*0.30;
-    place(alongX?box(0.11,0.26,0.09,M.trimDk):box(0.09,0.26,0.11,M.trimDk),
-          alongX?x+off:x, y, alongX?z:z+off).castShadow=false;
+    const rk=place(alongX?box(0.11,0.26,0.09,M.trimDk):box(0.09,0.26,0.11,M.trimDk),
+          alongX?x+off:x, y, alongX?z:z+off);
+    rk.castShadow=false;
+    const key = keys && keys[i];
+    if(key){ rk.userData.sw = key; switchRockers.push({mesh:rk, key:key, alongX:alongX}); }
   }
 }
 /* wall outlet: white plate + rocker */
@@ -764,6 +821,12 @@ function upper(x,z,w,d,face='z+',h=2.6,y0=4.6){
   for(let i=0;i<=n;i++){
     const u=Math.min(AW-0.06,Math.max(0.06,i*AW/n));
     P(u, y0+h/2, 0.12, h-0.44, 0.09, tm);            // stiles
+  }
+  {  // under-cabinet light strip, on the under switch
+    const ufx2 = face==='x+'?1:face==='x-'?-1:0;
+    const ufz2 = face==='z+'?1:face==='z-'?-1:0;
+    const st = ufx2 ? box(0.05,0.045,d-0.3,M.lightUC) : box(w-0.3,0.045,0.05,M.lightUC);
+    place(st, x+w/2 + ufx2*(w/2-0.12), y0-0.03, z+d/2 + ufz2*(d/2-0.12)).castShadow=false;
   }
   const utag='U'+x.toFixed(2)+','+z.toFixed(2);
   for(let i=0;i<n;i++){                              // knobs, low on each door
@@ -1218,11 +1281,11 @@ function pendant(x,z,y=6.5){
     pput(mesh(new THREE.SphereGeometry(F(0.46),20,14),M.glass), x, y+H*0.5, z);
     pput(mesh(new THREE.CylinderGeometry(F(0.20),F(0.14),F(0.16),16),fm), x,y+H*0.95,z);
   }
-  const bulb=mesh(new THREE.SphereGeometry(F(0.15),10,10),M.lightE);
+  const bulb=mesh(new THREE.SphereGeometry(F(0.15),10,10),M.lightPend);
   pput(bulb,x,y+H*0.46,z);
 }
 function recessed(x,z,cy=CEIL){
-  const d=new THREE.Mesh(new THREE.CylinderGeometry(F(0.28),F(0.28),F(0.03),16),M.lightE);
+  const d=new THREE.Mesh(new THREE.CylinderGeometry(F(0.28),F(0.28),F(0.03),16),M.lightCan);
   place(d,x,cy-0.03,z);
 }
 function nookTable(cx,cz,alongX){
@@ -1443,12 +1506,15 @@ function buildShared(opt){
   // z=20.0 put this one dead centre of the pantry doorway once the wall was cut
   // open for it, so it hung in mid-air. Moved south of the pantry (z 16.44..21.74)
   // onto wall that still exists.
-  lightSwitch(7.0, ZONE_D-0.03, 4.0, true);          // kitchen, at the deck door
-  lightSwitch(FAM_XWI+0.03, 21.3, 4.0, false);       // family, by the french doors
-  lightSwitch(21.05, 16.7, 4.0, false);              // family, by the passage
-  lightSwitch(21.05, 11.2, 4.0, false);              // nook side of the passage
-  lightSwitch(21.56, 12.3, 4.0, false);              // dining side
-  lightSwitch(35.5, ENT_NZ+0.05, 4.0, true, 2);      // entry, by the front door
+  // Switch audit: every plate sits on real wall now. The old spots put one in
+  // the family passage opening, one in the pantry doorway, one on the entry
+  // sidelite glass, and one floating in the kitchen/family opening.
+  lightSwitch(6.3, ZONE_D-0.03, 4.0, true, 1, ['cans']);      // deck-door stub -> cans
+  lightSwitch(FAM_XWI+0.03, 14.5, 4.0, false, 1, ['cans']);   // family (3-way cans)
+  lightSwitch(21.05, 16.0, 4.0, false, 1, ['pend']);          // family, N of pantry
+  lightSwitch(21.05, 11.2, 4.0, false, 1, ['pend']);          // nook side -> pendants
+  lightSwitch(21.56, 11.3, 4.0, false);                       // dining (unwired)
+  lightSwitch(40.79, ENT_NZ+0.05, 4.0, true, 2);              // entry stub, 2-gang
   outlet(6.35,13.6,1.3,false); outlet(20.9,23.0,1.3,false);
   outlet(13.5,SOUTH-0.28,1.3,true);
 
@@ -1547,7 +1613,7 @@ function buildOptionA(variant){
   // and the shaker face frame breaks around the DW bay instead of drawing over it.
   const SKA={x:0.55,z:4.75,w:1.5,d:2.5};              // sink cutout (front-to-back x)
   counter(0.25,2.33, 2.08, 9.6, M.cab, SKA, 'x+');
-  lightSwitch(0.03, 2.45, 3.8, false, 2);   // disposal + under-cabinet lights
+  lightSwitch(0.03, 2.45, 3.8, false, 2, ['disp','under']);
   shakerRun(2.33,2.33, 0.30, false, 1);               // corner filler
   shakerRun(2.33,4.63, 7.30, false, 1);               // sink base + run south
   dishwasher(2.33,2.63, 2.0, false, 1);
@@ -1632,7 +1698,7 @@ function buildOptionB(){
   // north counter east of peninsula: D/W + sink centred under the 3' window (x 13..16)
   const SKB={x:13.25,z:0.55,w:2.5,d:1.5};
   counter(10.6,0.25, ZONE_W-10.6-0.25, 2.08, M.cab, SKB, 'z+');
-  lightSwitch(12.5, 0.03, 3.8, true, 2);    // disposal + under-cabinet lights
+  lightSwitch(12.5, 0.295, 3.8, true, 2, ['disp','under']);  // proud of the tile
   shakerRun(10.6,2.33, 0.30, true, 1);                   // filler at the peninsula
   shakerRun(12.9,2.33, ZONE_W-0.25-12.9, true, 1);       // sink base + run east
   dishwasher(10.9,2.33, 2.0, true, 1);
@@ -1735,7 +1801,7 @@ function init(){
     pmrem.dispose();
   }
 
-  const hemi = new THREE.HemisphereLight(0xdfeaf4, 0xa89b87, 0.32);
+  const hemi = hemiLight = new THREE.HemisphereLight(0xdfeaf4, 0xa89b87, 0.32);
   scene.add(hemi);
   const sun = sunLight = new THREE.DirectionalLight(0xfff0da, 2.3);
   // Same sun direction as before, but pulled back along it and re-aimed at the
@@ -1755,11 +1821,11 @@ function init(){
   sun.shadow.camera.top=s; sun.shadow.camera.bottom=-s;
   sun.shadow.camera.near=F(60); sun.shadow.camera.far=F(145);
   scene.add(sun);
-  const fill = new THREE.PointLight(0xffe9c8, 0.5, F(34), 2);
+  const fill = fillLight = new THREE.PointLight(0xffe9c8, 0.5, F(34), 2);
   fill.position.set(F(10),F(8),F(7)); scene.add(fill);
   fridgeLamp = new THREE.PointLight(0xffedc9, 0, F(4.5), 2);   // lives at intensity 0
   scene.add(fridgeLamp);
-  const fill2 = new THREE.PointLight(0xffe9c8, 0.4, F(34), 2);
+  const fill2 = fill2Light = new THREE.PointLight(0xffe9c8, 0.4, F(34), 2);
   fill2.position.set(F(26),F(8),F(6)); scene.add(fill2);
 
   buildOption(current);
@@ -1769,16 +1835,18 @@ function init(){
   respawn();
   finDesktopEvents();
   syncLayoutUI();          // the hash may have chosen a layout
+  if(NIGHT.on){ const v=NIGHT.on; NIGHT.on=false; setNight(v); } else applyLights();
   setupXR();
   renderer.setAnimationLoop(animate);   // must drive the loop; rAF never fires in XR
 }
 function buildOption(key){
   if(world){ scene.remove(world); disposeWorld(world); }
-  world = new THREE.Group(); solids = []; openables = []; movables = []; fridgeLights = [];
+  world = new THREE.Group(); solids = []; openables = []; movables = []; fridgeLights = []; switchRockers = [];
   buildShared(key); OPTS[key].build();
   scene.add(world);
   applyFinishes();          // colours survive an A/B or finish rebuild
   if(xray) setXray(true);   // new clones inherit the current x-ray state
+  applyLights();            // rocker tilt + circuit state on fresh geometry
   document.getElementById('optdesc').textContent = OPTS[key].desc;
   drawMapStatic();
   if(planMode) drawPlan();
@@ -2176,8 +2244,12 @@ function tapAt(){
   _fray.far = 60;
   const hits = _fray.intersectObject(world, true);
   for(const h of hits){
-    const g = doorOf(h.object);
-    if(g){ toggleDoor(g); return g; }
+    let o = h.object;
+    while(o){
+      if(o.userData && o.userData.sw){ toggleLightGroup(o.userData.sw); return o; }
+      if(o.userData && o.userData.door){ toggleDoor(o); return o; }
+      o = o.parent;
+    }
   }
   return null;
 }
@@ -2592,6 +2664,7 @@ function syncURL(){
   for(const k of KIND_LIST) if(FIN[k]) parts.push(k+'-'+encSw(FIN[k]));
   if(current !== 'A') parts.push('kit-'+current);
   if(famOpt !== 'A') parts.push('fam-'+famOpt);
+  if(NIGHT.on) parts.push('nite-1');
   if(FIN.styles) for(const k in FIN.styles) parts.push('s.'+k+'-'+FIN.styles[k]);
   if(FIN.inst) for(const id in FIN.inst) parts.push('i.'+encodeURIComponent(id)+'-'+encSw(FIN.inst[id]));
   const h = parts.length ? '#f='+parts.join('~') : '';
@@ -2607,6 +2680,7 @@ function readURL(){
     else if(key.startsWith('i.')){ FIN.inst = FIN.inst||{}; FIN.inst[decodeURIComponent(key.slice(2))] = decSw(val); }
     else if(key === 'kit'){ if(OPTS[val]) current = val; }
     else if(key === 'fam'){ if(val==='A'||val==='B'||val==='B2') famOpt = val; }
+    else if(key === 'nite'){ if(val==='1') NIGHT.on = true; }
     else if(KINDS[key]) FIN[key] = decSw(val);
   }
   _urlLock = false;
@@ -2760,6 +2834,8 @@ function finDesktopEvents(){
 
   const on = (id, fn) => { const b = document.getElementById(id); if(b) b.onclick = fn; };
   on('btnFinish', ()=>setPickMode(!pickMode));
+  on('btnDay',   ()=>setNight(false));
+  on('btnNight', ()=>setNight(true));
   on('finAll',    ()=>{ wallScope='all'; onSelectionChanged(); });
   on('finOne',    ()=>{ wallScope='one'; onSelectionChanged(); });
   on('finReset',  ()=>{ resetFinishes(); selectKind(null); });
@@ -3058,15 +3134,16 @@ function panelItems(){
   const bar=(i,label,sub,act,hot)=>items.push({x:8+i*(BW+8),y:BY,w:BW,h:BH,label,sub,act,hot});
   const endVR=()=>{ const s=renderer.xr.getSession(); if(s) s.end(); };
   if(panelPage==='main'){
-    const BW5=(PC_W-16-4*6)/5, BY5=PC_H-58;
-    const bar5=(i,label,sub2,act,hot)=>items.push(
-      {x:8+i*(BW5+6), y:BY5, w:BW5, h:50, label:label, sub:sub2, act:act, hot:hot});
+    const BW6=(PC_W-16-5*6)/6, BY6=PC_H-58;
+    const bar6=(i,label,sub2,act,hot)=>items.push(
+      {x:8+i*(BW6+6), y:BY6, w:BW6, h:50, label:label, sub:sub2, act:act, hot:hot});
     const kd = current==='A2' ? 'A\u2032' : current;
-    bar5(0,'KIT '+kd,'cycle kitchen', ()=>switchOpt(current==='A'?'A2':current==='A2'?'B':'A'));
-    bar5(1,'FAM '+(famOpt==='B2'?'B\u2032':famOpt),'cycle family', ()=>switchFam(famOpt==='A'?'B':famOpt==='B'?'B2':'A'));
-    bar5(2,'PLAN','sheet floor',  ()=>setPdfFloor(!pdfFloor), pdfFloor);
-    bar5(3,'FINISH','recolour',   ()=>{ panelPage='edit'; pickMode=true; }, false);
-    bar5(4,'EXIT','end session',  endVR);
+    bar6(0,'KIT '+kd,'cycle', ()=>switchOpt(current==='A'?'A2':current==='A2'?'B':'A'));
+    bar6(1,'FAM '+(famOpt==='B2'?'B\u2032':famOpt),'cycle', ()=>switchFam(famOpt==='A'?'B':famOpt==='B'?'B2':'A'));
+    bar6(2,'PLAN','sheet',  ()=>setPdfFloor(!pdfFloor), pdfFloor);
+    bar6(3, NIGHT.on?'DAY':'NIGHT', NIGHT.on?'lights up':'lights down', ()=>setNight(!NIGHT.on), NIGHT.on);
+    bar6(4,'FINISH','recolour', ()=>{ panelPage='edit'; pickMode=true; }, false);
+    bar6(5,'EXIT','end',  endVR);
     return items;
   }
   const K = selKind ? KINDS[selKind] : null;
@@ -3113,7 +3190,7 @@ function ensurePanel(){
 }
 function drawPanel(){
   if(!panelTex) return;
-  const key=[panelPage,current,famOpt,finish,pdfFloor,selKind,wallScope,panelHot,finRev,xrErr].join('|');
+  const key=[panelPage,current,famOpt,finish,pdfFloor,selKind,wallScope,panelHot,finRev,xrErr,NIGHT.on].join('|');
   if(key===panelKey) return;            // a canvas upload every frame is not free
   panelKey=key;
   panelCache=panelItems();
@@ -3197,16 +3274,17 @@ function nearPanel(c){
 }
 /* ray out of a controller or hand, in world space */
 function vrPickFrom(c){
-  c.getWorldPosition(_v); c.getWorldQuaternion(_q);
-  return pickRay(_v.clone(), _v2.set(0,0,-1).applyQuaternion(_q).normalize().clone());
+  uiRay(c);
+  return pickRay(_uo.clone(), _ud.clone());
 }
 /* straight pointer while the finish editor is open */
 function updatePickRay(c){
   ensureArc();
-  c.getWorldPosition(_v); c.getWorldQuaternion(_q);
-  const d=_v2.set(0,0,-1).applyQuaternion(_q).normalize();
-  const hit=pickRay(_v.clone(), d.clone());
-  const end = hit ? hit.point : _v.clone().add(d.clone().multiplyScalar(6));
+  uiRay(c);
+  const _o=_uo, d=_ud;
+  const hit=pickRay(_o.clone(), d.clone());
+  const end = hit ? hit.point : _o.clone().add(d.clone().multiplyScalar(6));
+  const _v=_o;
   const arr=arcLine.geometry.attributes.position.array;
   for(let i=0;i<ARC_N;i++){
     const t=i/(ARC_N-1);
@@ -3608,12 +3686,27 @@ function pointerCtrl(){
   const live = xrCtrls.filter(c=>c.userData.src);
   return live.filter(c=>c.userData.hand === 'right')[0] || live[0] || null;
 }
+/* Where a hand 'points': WebXR's target-ray pose sits at the wrist, so using
+   it for fine UI made the cursor land nowhere near the visible finger — fine
+   for teleport, hopeless for swatches. For hands, the UI ray runs from the eye
+   THROUGH the index fingertip; controllers keep their real pointer pose. */
+const _uo = new THREE.Vector3(), _ud = new THREE.Vector3();
+function uiRay(c){
+  if(c.userData.isHand && c.userData.tipV){
+    headWorld(_uo);
+    _ud.copy(c.userData.tipV).applyMatrix4(rig.matrixWorld).sub(_uo).normalize();
+  } else {
+    c.getWorldPosition(_uo);
+    c.getWorldQuaternion(_q);
+    _ud.set(0,0,-1).applyQuaternion(_q).normalize();
+  }
+}
 /* ray-vs-panel, returns the item index under the pointer */
 const _pv = new THREE.Vector3();
 function panelRayPick(c){
   if(!panel || !panel.visible) return null;
-  c.getWorldPosition(_v); c.getWorldQuaternion(_q);
-  _fray.set(_v.clone(), _pv.set(0,0,-1).applyQuaternion(_q).normalize().clone());
+  uiRay(c);
+  _fray.set(_uo.clone(), _ud.clone());
   _fray.far = 4;
   const hit = _fray.intersectObject(panel, false)[0];
   if(!hit) return null;
