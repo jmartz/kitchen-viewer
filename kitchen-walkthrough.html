@@ -569,7 +569,7 @@ function applyLights(){
   if(fillLight)  fillLight.intensity  = LIGHTS.cans.on ? (n?1.25:0.5) : 0;
   if(fill2Light) fill2Light.intensity = LIGHTS.pend.on ? (n?1.05:0.4) : 0;
   for(const r of switchRockers)
-    r.mesh.rotation[r.alongX?'x':'z'] = (LIGHTS[r.key] && LIGHTS[r.key].on) ? -0.22 : 0.22;
+    r.mesh.rotation[r.alongX?'x':'z'] = swTilt(r.alongX, r.face, LIGHTS[r.key] && LIGHTS[r.key].on);
 }
 function toggleLightGroup(key){
   if(!LIGHTS[key]) return;
@@ -725,7 +725,14 @@ function bayDrawer(name, x, z, alongX, out, D, u0, w, y0, y1, mat, px, py, pz){
 }
 
 /* wall light switch: plate + rocker(s), gang-able. Caller gives the face pos. */
-function lightSwitch(x,z,y,alongX,gang=1,keys){
+/* `face` = the side the viewer stands on, +1/-1 along the plate's normal axis.
+   Rocker convention: ON presses the TOP edge toward the wall; OFF pops it out
+   toward you. The tilt sign has to come from the facing — one fixed local
+   rotation read as "up" on one wall and "down" on the opposite one. */
+function swTilt(alongX, face, on){
+  return 0.22 * (on ? -1 : 1) * face * (alongX ? 1 : -1);
+}
+function lightSwitch(x,z,y,alongX,gang=1,keys,face=1){
   const w=0.32*gang;
   place(alongX?box(w,0.46,0.05,M.trimW):box(0.05,0.46,w,M.trimW), x,y,z).castShadow=false;
   for(let i=0;i<gang;i++){
@@ -733,8 +740,9 @@ function lightSwitch(x,z,y,alongX,gang=1,keys){
     const rk=place(alongX?box(0.11,0.26,0.09,M.trimDk):box(0.09,0.26,0.11,M.trimDk),
           alongX?x+off:x, y, alongX?z:z+off);
     rk.castShadow=false;
+    rk.rotation[alongX?'x':'z'] = swTilt(alongX, face, false);   // unwired sit OFF
     const key = keys && keys[i];
-    if(key){ rk.userData.sw = key; switchRockers.push({mesh:rk, key:key, alongX:alongX}); }
+    if(key){ rk.userData.sw = key; switchRockers.push({mesh:rk, key:key, alongX:alongX, face:face}); }
   }
 }
 /* wall outlet: white plate + rocker */
@@ -1509,12 +1517,12 @@ function buildShared(opt){
   // Switch audit: every plate sits on real wall now. The old spots put one in
   // the family passage opening, one in the pantry doorway, one on the entry
   // sidelite glass, and one floating in the kitchen/family opening.
-  lightSwitch(6.3, ZONE_D-0.03, 4.0, true, 1, ['cans']);      // deck-door stub -> cans
-  lightSwitch(FAM_XWI+0.03, 14.5, 4.0, false, 1, ['cans']);   // family (3-way cans)
-  lightSwitch(21.05, 16.0, 4.0, false, 1, ['pend']);          // family, N of pantry
-  lightSwitch(21.05, 11.2, 4.0, false, 1, ['pend']);          // nook side -> pendants
-  lightSwitch(21.56, 11.3, 4.0, false);                       // dining (unwired)
-  lightSwitch(40.79, ENT_NZ+0.05, 4.0, true, 2);              // entry stub, 2-gang
+  lightSwitch(6.3, ZONE_D-0.03, 4.0, true, 1, ['cans'], -1);  // deck-door stub -> cans
+  lightSwitch(FAM_XWI+0.03, 14.5, 4.0, false, 1, ['cans'], 1); // family (3-way cans)
+  lightSwitch(21.05, 16.0, 4.0, false, 1, ['pend'], -1);      // family, N of pantry
+  lightSwitch(21.05, 11.2, 4.0, false, 1, ['pend'], -1);      // nook side -> pendants
+  lightSwitch(21.56, 11.3, 4.0, false, 1, null, 1);           // dining (unwired)
+  lightSwitch(40.79, ENT_NZ+0.05, 4.0, true, 2, null, 1);     // entry stub, 2-gang
   outlet(6.35,13.6,1.3,false); outlet(20.9,23.0,1.3,false);
   outlet(13.5,SOUTH-0.28,1.3,true);
 
@@ -1613,7 +1621,7 @@ function buildOptionA(variant){
   // and the shaker face frame breaks around the DW bay instead of drawing over it.
   const SKA={x:0.55,z:4.75,w:1.5,d:2.5};              // sink cutout (front-to-back x)
   counter(0.25,2.33, 2.08, 9.6, M.cab, SKA, 'x+');
-  lightSwitch(0.03, 2.45, 3.8, false, 2, ['disp','under']);
+  lightSwitch(0.03, 2.45, 3.8, false, 2, ['disp','under'], 1);
   shakerRun(2.33,2.33, 0.30, false, 1);               // corner filler
   shakerRun(2.33,4.63, 7.30, false, 1);               // sink base + run south
   dishwasher(2.33,2.63, 2.0, false, 1);
@@ -1698,7 +1706,7 @@ function buildOptionB(){
   // north counter east of peninsula: D/W + sink centred under the 3' window (x 13..16)
   const SKB={x:13.25,z:0.55,w:2.5,d:1.5};
   counter(10.6,0.25, ZONE_W-10.6-0.25, 2.08, M.cab, SKB, 'z+');
-  lightSwitch(12.5, 0.295, 3.8, true, 2, ['disp','under']);  // proud of the tile
+  lightSwitch(12.5, 0.295, 3.8, true, 2, ['disp','under'], 1); // proud of the tile
   shakerRun(10.6,2.33, 0.30, true, 1);                   // filler at the peninsula
   shakerRun(12.9,2.33, ZONE_W-0.25-12.9, true, 1);       // sink base + run east
   dishwasher(10.9,2.33, 2.0, true, 1);
