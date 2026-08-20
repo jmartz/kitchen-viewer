@@ -2885,7 +2885,7 @@ function finDesktopEvents(){
      controllers also: left stick glide, right stick snap turn, grip runs,
                        A swap, B finish, X recenter, Y exit
    ============================================================ */
-let rig=null, xrOn=false, xrCtrls=[], needRecenter=false, foveated=false;
+let rig=null, xrOn=false, xrCtrls=[], needRecenter=false, foveated=false, srcFrame=0;
 const XR_TURN = Math.PI/6, XR_SPEED = 1.5, DEAD = 0.22;
 const _v = new THREE.Vector3(), _q = new THREE.Quaternion(),
       _v2 = new THREE.Vector3(), _q2 = new THREE.Quaternion(),
@@ -2927,7 +2927,7 @@ function setupXR(){
   rig.add(camera);
   scene.add(rig);
 
-  for(let i=0;i<2;i++){
+  for(let i=0;i<4;i++){
     const c = renderer.xr.getController(i);
     c.userData.prev = {};
     c.addEventListener('connected', e=>{
@@ -3206,8 +3206,9 @@ function ensurePanel(){
 }
 function drawPanel(){
   if(!panelTex) return;
+  const hSig = xrCtrls.map(c=>c.userData.src?(c.userData.hand||'?')[0]:'-').join('');
   const flashI = (panelFlash && nowMs() < panelFlash.until) ? panelFlash.i : -1;
-  const key=[panelPage,current,famOpt,finish,pdfFloor,selKind,wallScope,panelHot,panelNear,flashI,finRev,xrErr,NIGHT.on].join('|');
+  const key=[panelPage,current,famOpt,finish,pdfFloor,selKind,wallScope,panelHot,panelNear,flashI,finRev,xrErr,NIGHT.on,hSig].join('|');
   if(key===panelKey) return;            // a canvas upload every frame is not free
   panelKey=key;
   panelCache=panelItems();
@@ -3224,6 +3225,13 @@ function drawPanel(){
     g.fillStyle='rgba(245,242,236,.5)'; g.font='17px system-ui, sans-serif';
     g.fillText('pinch / trigger to aim, release to go', 14, 112);
     g.fillText('FINISH lets you recolour what you point at', 14, 138);
+    const hL=xrCtrls.some(c=>c.userData.src&&c.userData.hand==='left');
+    const hR=xrCtrls.some(c=>c.userData.src&&c.userData.hand==='right');
+    g.font='15px system-ui, sans-serif';
+    g.fillStyle = hL ? 'rgba(140,220,140,.9)' : 'rgba(220,120,110,.9)';
+    g.fillText('L '+(hL?'✓':'✗'), PC_W-92, 26);
+    g.fillStyle = hR ? 'rgba(140,220,140,.9)' : 'rgba(220,120,110,.9)';
+    g.fillText('R '+(hR?'✓':'✗'), PC_W-46, 26);
   } else {
     g.fillStyle='#c8a24a'; g.font='bold 26px system-ui, sans-serif';
     g.fillText(selKind ? KINDS[selKind].label : 'Point and pinch', 14, 38);
@@ -3380,6 +3388,27 @@ function xrFrame(dt, frame){
   if(!foveated) foveated = applyFoveation(0.7);
   if(!readHead(frame)) return;            // no pose yet: do nothing at all
   rig.updateMatrixWorld(true);
+
+  /* Input-source reconciliation. The runtime can swap a hand's XRInputSource
+     without our slot seeing events (system-menu handoffs, a controller
+     twitching awake shuffling indices). The symptom was one hand tracking
+     perfectly in the Quest overlay while the app showed nothing. Once a
+     second: unbind anything stale, claim anything unclaimed. */
+  if((srcFrame=(srcFrame+1)%72)===0){
+    const s = renderer.xr.getSession();
+    if(s && s.inputSources){
+      const live = Array.from(s.inputSources);
+      for(const c of xrCtrls){
+        if(c.userData.src && live.indexOf(c.userData.src) < 0)
+          c.dispatchEvent({type:'disconnected'});
+      }
+      for(const src of live){
+        if(xrCtrls.some(cc=>cc.userData.src===src)) continue;
+        const c = xrCtrls[live.indexOf(src)] || xrCtrls.find(cc=>!cc.userData.src);
+        if(c) c.dispatchEvent({type:'connected', data:src});
+      }
+    }
+  }
 
   if(needRecenter){
     recenterTo(F(XR_SPAWN.x), F(XR_SPAWN.z), XR_SPAWN.yaw);
