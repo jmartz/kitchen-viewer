@@ -2936,6 +2936,9 @@ function setupXR(){
       }
     });
     c.addEventListener('disconnected', ()=>{
+      if(holdCtrl === c){ holdCtrl = null; cancelAim(); }
+      if(grabCtrl === c){ endDoorGrab(); endMovGrab(); }
+      c.userData.mode = null;
       c.userData.gp = null; c.userData.src = null; c.userData.isHand = false;
       if(c.userData.stub){ c.remove(c.userData.stub); c.userData.stub = null; }
       if(c.userData.hmesh) c.userData.hmesh.visible = false;
@@ -2978,7 +2981,7 @@ function setupXR(){
       _v.set(0,0,-1).applyQuaternion(_q);
       yaw = Math.atan2(-_v.x, -_v.z); pitch = 0;
     }
-    cancelAim();
+    cancelAim(); holdCtrl = null;
     endDoorGrab(); endMovGrab();
     if(avatar) avatar.visible = false;
     iconPool.forEach(s=>s.visible=false);
@@ -3450,7 +3453,8 @@ function xrFrame(dt, frame){
   updateAvatar(dt);
   if(pickMode){
     if(pc) updatePickRay(pc); else cancelAim();
-  } else if(holdCtrl){
+  } else if(holdCtrl && !holdCtrl.userData.src){ holdCtrl = null; cancelAim(); }
+  else if(holdCtrl){
     const held = (nowMs() - (holdCtrl.userData.tDown||0))/1000;
     if(held >= TELE_HOLD){ aimCtrl = holdCtrl; updateAim(); }
     else drawHoldRay(holdCtrl, held/TELE_HOLD);
@@ -3524,6 +3528,7 @@ function placePanel(dt){
    it (DOORS holds fractions now); the ring dims, and fades once you move away. */
 const NEAR_R = 0.3048, GRAB_R = 0.22;
 let iconDim=null, iconLit=null, iconPool=[], grabDoor=null, grabCtrl=null, grabRef={}, icFrame=0;
+let swArmed=true;
 let grabMov=null, movOff=new THREE.Vector3();
 function iconTex(fill){
   const c=document.createElement('canvas'); c.width=c.height=64;
@@ -3548,9 +3553,10 @@ function handTips(){
   const tips=[];
   for(const c of xrCtrls){
     if(!c.userData.src) continue;
+    if(!c.userData.tipW) c.userData.tipW = new THREE.Vector3();
     if(c.userData.isHand && c.userData.tipV)
-      tips.push({c, p:_tw.copy(c.userData.tipV).applyMatrix4(rig.matrixWorld).clone()});
-    else tips.push({c, p:c.getWorldPosition(new THREE.Vector3())});
+      tips.push({c, p:c.userData.tipW.copy(c.userData.tipV).applyMatrix4(rig.matrixWorld)});
+    else tips.push({c, p:c.getWorldPosition(c.userData.tipW)});
   }
   return tips;
 }
@@ -3568,6 +3574,17 @@ function updateHandleIcons(){
     if(dmin < NEAR_R || grabDoor===g)
       near.push({g, pos:_tw2.clone(), lit: grabDoor===g, d:dmin});
   }
+  // switches press on touch: push a rocker with a fingertip, no pinch needed
+  let swHot=null;
+  for(const t of tips){
+    for(const r of switchRockers){
+      r.mesh.getWorldPosition(_tw2);
+      if(_tw2.distanceTo(t.p) < 0.055){ swHot=r; break; }
+    }
+    if(swHot) break;
+  }
+  if(swHot && swArmed){ toggleLightGroup(swHot.key); swArmed=false; }
+  if(!swHot) swArmed=true;
   near.sort((a,b)=>a.d-b.d);
   for(let i=0;i<iconPool.length;i++){
     const s=iconPool[i], n=near[i];
@@ -3772,7 +3789,8 @@ function nowMs(){ return (typeof performance !== 'undefined') ? performance.now(
 function onSelectStart(c){
   c.userData.tDown = nowMs();
   c.userData.mode = null;
-  if(nearPanel(c) || panelRayPick(c) !== null){ c.userData.mode = 'ui'; return; }
+  const pr = panelRayPick(c);
+  if(nearPanel(c) || (pr !== null && pr >= 0)){ c.userData.mode = 'ui'; return; }
   if(pickMode){ c.userData.mode = 'finish'; return; }
   const gp2 = grabPoint(c).clone();
   const hd = nearestHandle(gp2);
