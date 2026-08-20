@@ -3605,10 +3605,13 @@ function nearestHandle(p){
   }
   return best;
 }
+const _mb = new THREE.Box3();
 function nearestMovable(p){
-  let best=null, bd=0.38;
+  let best=null, bd=0.22;
   for(const g of movables){
-    _tw2.copy(g.position); _tw2.y=p.y;
+    _mb.setFromObject(g);
+    if(_mb.isEmpty()) continue;
+    _tw2.copy(p).clamp(_mb.min, _mb.max);   // nearest point on the piece itself
     const d=_tw2.distanceTo(p);
     if(d<bd){ bd=d; best=g; }
   }
@@ -3797,7 +3800,7 @@ function onSelectStart(c){
   if(hd){ c.userData.mode='door'; startDoorGrab(c, hd); return; }
   const mv = nearestMovable(gp2);
   if(mv){ c.userData.mode='move'; startMovGrab(c, mv); return; }
-  if(c === pointerCtrl() && nowMs() - teleAt > TELE_COOL){
+  if(c === pointerCtrl()){
     c.userData.mode = 'hold';
     holdCtrl = c;
     aimDirS = null;
@@ -3825,9 +3828,11 @@ function onSelectEnd(c){
     if(h) selectKind(h.kind, h.mesh);
     return;
   }
-  if(mode === 'hold' && held >= TELE_HOLD && aimCtrl === c){
-    commitTeleport();
-    teleAt = nowMs();
+  if(mode === 'hold' && held >= TELE_HOLD){
+    if(nowMs() - teleAt > 250){    // cooldown lives here now, not at the start
+      commitTeleport();
+      teleAt = nowMs();
+    } else cancelAim();
     return;
   }
   cancelAim();
