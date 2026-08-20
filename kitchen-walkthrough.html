@@ -3125,6 +3125,7 @@ function commitTeleport(){
    of teleporting. Hit regions come from the same item list that was last
    drawn, so what you poke is always what you see. */
 let panel=null, panelTex=null, panelKey='', panelHot=-1, pokeArmed=true;
+let panelNear=0, panelFlash=null;   // approach level (0..3) + press flash
 let panelPage='main', panelCache=[];
 const PANEL_W=0.30, PANEL_H=0.20, PC_W=420, PC_H=280;
 
@@ -3180,9 +3181,13 @@ function ensurePanel(){
   const cv=document.createElement('canvas'); cv.width=PC_W; cv.height=PC_H;
   panelTex=new THREE.CanvasTexture(cv);
   panelTex.encoding=THREE.sRGBEncoding;
+  // depthTest stays ON: with it off the panel drew over your own hand even
+  // when the hand was nearer, which reads as the hand being "behind" the menu.
+  // Visibility against world geometry is handled by pulling the panel closer
+  // instead (see placePanel).
   panel=new THREE.Mesh(new THREE.PlaneGeometry(PANEL_W,PANEL_H),
-    new THREE.MeshBasicMaterial({map:panelTex, transparent:true, depthTest:false}));
-  panel.renderOrder=999;
+    new THREE.MeshBasicMaterial({map:panelTex, transparent:true}));
+  panel.renderOrder=50;
   panel.visible=false;
   rig.add(panel);
   drawPanel();
@@ -3190,7 +3195,8 @@ function ensurePanel(){
 }
 function drawPanel(){
   if(!panelTex) return;
-  const key=[panelPage,current,famOpt,finish,pdfFloor,selKind,wallScope,panelHot,finRev,xrErr,NIGHT.on].join('|');
+  const flashI = (panelFlash && nowMs() < panelFlash.until) ? panelFlash.i : -1;
+  const key=[panelPage,current,famOpt,finish,pdfFloor,selKind,wallScope,panelHot,panelNear,flashI,finRev,xrErr,NIGHT.on].join('|');
   if(key===panelKey) return;            // a canvas upload every frame is not free
   panelKey=key;
   panelCache=panelItems();
@@ -3220,23 +3226,30 @@ function drawPanel(){
     g.fillStyle='#fff'; g.font='13px system-ui, sans-serif';
     g.fillText(('glitch: '+xrErr).slice(0,54), 14, PC_H-68);
   }
-  for(const it of panelCache){
-    const hot = (panelHot>=0 && panelCache[panelHot]===it);
+  for(let ii=0; ii<panelCache.length; ii++){
+    const it = panelCache[ii];
+    // st: 0 idle, 1 aiming at it, 2 about to touch, 3 press flash
+    const st = (flashI===ii) ? 3 : (panelHot===ii ? panelNear : 0);
     if(it.swatch !== undefined){
       g.fillStyle='#'+it.swatch.toString(16).padStart(6,'0');
       g.fillRect(it.x,it.y,it.w,it.h);
-      g.strokeStyle = hot ? '#ffffff' : 'rgba(0,0,0,.45)';
-      g.lineWidth = hot ? 3 : 1;
+      if(st===3){ g.fillStyle='rgba(255,255,255,.65)'; g.fillRect(it.x,it.y,it.w,it.h); }
+      g.strokeStyle = st>0 ? '#ffffff' : 'rgba(0,0,0,.45)';
+      g.lineWidth = st>=2 ? 4.5 : st===1 ? 2.5 : 1;
       g.strokeRect(it.x,it.y,it.w,it.h);
       continue;
     }
-    const on = hot || it.hot;
-    g.fillStyle = on ? '#c8a24a' : 'rgba(245,242,236,.09)';
+    const on = st===3 || it.hot;
+    g.fillStyle = on ? '#c8a24a'
+               : st===2 ? 'rgba(200,162,74,.48)'
+               : st===1 ? 'rgba(200,162,74,.20)'
+               : 'rgba(245,242,236,.09)';
     g.fillRect(it.x,it.y,it.w,it.h);
-    g.strokeStyle = on ? '#c8a24a' : 'rgba(200,162,74,.55)';
-    g.lineWidth=2; g.strokeRect(it.x,it.y,it.w,it.h);
+    g.strokeStyle = (on || st>0) ? '#c8a24a' : 'rgba(200,162,74,.55)';
+    g.lineWidth = st>=2 ? 3.5 : 2;
+    g.strokeRect(it.x,it.y,it.w,it.h);
     g.textAlign='center';
-    g.fillStyle = on ? '#1c1a17' : '#c8a24a';
+    g.fillStyle = on ? '#1c1a17' : st===2 ? '#ffe9b8' : '#c8a24a';
     if(it.small){
       g.font='bold 15px system-ui, sans-serif';
       g.fillText(it.label, it.x+it.w/2, it.y+it.h/2+5);
@@ -3253,18 +3266,22 @@ function drawPanel(){
 }
 /* which item is rig-local point `p` touching? -1 on the panel but on no item,
    null if not on the panel at all */
-function panelPick(p){
+function panelHit(p){          // {i, z}: item under the point + depth in front
   if(!panel || !panel.visible) return null;
   _m.copy(panel.matrix).invert();
   _s.copy(p).applyMatrix4(_m);
-  if(Math.abs(_s.z) > 0.035) return null;
   const u=(_s.x/PANEL_W+0.5)*PC_W, v=(0.5-_s.y/PANEL_H)*PC_H;
   if(u<0||u>PC_W||v<0||v>PC_H) return null;
   for(let i=0;i<panelCache.length;i++){
     const r=panelCache[i];
-    if(u>=r.x && u<=r.x+r.w && v>=r.y && v<=r.y+r.h) return i;
+    if(u>=r.x && u<=r.x+r.w && v>=r.y && v<=r.y+r.h) return {i:i, z:_s.z};
   }
-  return -1;
+  return {i:-1, z:_s.z};
+}
+function panelPick(p){
+  const h = panelHit(p);
+  if(!h || Math.abs(h.z) > 0.035) return null;
+  return h.i;
 }
 /* suppress a teleport/pick when the select was really someone using the menu.
    Controller objects are children of rig, so .position is already rig-local. */
@@ -3400,25 +3417,30 @@ function xrFrame(dt, frame){
   panel.visible = true;
   placePanel(dt);
 
-  /* ---- poke to press, point to highlight ---- */
-  let pokeNow = -1;
+  /* ---- poke to press; the button you're APPROACHING lights before you land:
+          soft at ~5", strong inside ~2", full flash on the press itself ---- */
+  let pokeNow = -1, aimIdx = -1, aimZ = 1;
   for(const t of pokeTips){
-    const i = panelPick(t.p);
-    if(i !== null && i >= 0){ pokeNow = i; break; }
+    const h = panelHit(t.p);
+    if(!h || h.i < 0) continue;
+    if(h.z > -0.05 && h.z <= 0.035){ pokeNow = h.i; break; }
+    if(h.z > 0.035 && h.z < 0.14 && h.z < aimZ){ aimIdx = h.i; aimZ = h.z; }
   }
   if(pokeNow >= 0 && pokeArmed){
     const it = panelCache[pokeNow];
     if(it && it.act) it.act();
+    panelFlash = {i: pokeNow, until: nowMs()+190};
     pokeArmed = false;
   }
   if(pokeNow < 0) pokeArmed = true;
   const pc = pointerCtrl();
   let hoverNow = -1;
-  if(pokeNow < 0 && pc){
+  if(pokeNow < 0 && aimIdx < 0 && pc){
     const i = panelRayPick(pc);
     if(i !== null && i >= 0) hoverNow = i;
   }
-  panelHot = pokeNow >= 0 ? pokeNow : hoverNow;
+  panelHot  = pokeNow >= 0 ? pokeNow : aimIdx >= 0 ? aimIdx : hoverNow;
+  panelNear = pokeNow >= 0 ? 3 : aimIdx >= 0 ? (aimZ < 0.075 ? 2 : 1) : (hoverNow >= 0 ? 1 : 0);
   drawPanel();
 
   /* ---- pointer / teleport arc ---- */
@@ -3462,7 +3484,7 @@ function xrFrame(dt, frame){
    right hand through your own forearm to get at it. It is body-locked now: a
    lectern floating below eye line that follows the head lazily, so it holds
    still while you look around and never ends up behind your arm. */
-let panelYaw = 0, panelReady = false;
+let panelYaw = 0, panelReady = false, panelDistF = 1, pdFrame = 0;
 const PANEL_DIST = 0.55, PANEL_DROP = 0.36, PANEL_SLACK = 0.55, PANEL_ASIDE = 0.72;
 function placePanel(dt){
   const f = _v2.set(0,0,-1).applyQuaternion(headQuat); f.y = 0;
@@ -3476,9 +3498,20 @@ function placePanel(dt){
     panelYaw += Math.sign(d) * (Math.abs(d) - PANEL_SLACK) * Math.min(1, dt*2.5);
   // parked off to the LEFT of where you look, not dead ahead
   const py = panelYaw + PANEL_ASIDE;
-  const tx = headPos.x + Math.sin(py)*PANEL_DIST;
-  const tz = headPos.z + Math.cos(py)*PANEL_DIST;
-  const ty = headPos.y - PANEL_DROP;
+  // if a counter or wall sits inside arm's reach along the panel direction,
+  // park the panel in front of it rather than inside it
+  if((pdFrame=(pdFrame+1)%4)===0 && world){
+    headWorld(_v);
+    _pv.set(Math.sin(py),0,Math.cos(py)).applyQuaternion(rig.quaternion).normalize();
+    _fray.set(_v.clone(), _pv.clone());
+    _fray.far = PANEL_DIST + 0.18;
+    const hit = _fray.intersectObject(world, true)[0];
+    panelDistF = hit ? Math.max(0.5, (hit.distance-0.10)/PANEL_DIST) : 1;
+  }
+  const pd = PANEL_DIST * panelDistF;
+  const tx = headPos.x + Math.sin(py)*pd;
+  const tz = headPos.z + Math.cos(py)*pd;
+  const ty = headPos.y - PANEL_DROP*Math.min(1, panelDistF+0.25);
   if(!panel.userData.placed){ panel.position.set(tx,ty,tz); panel.userData.placed = true; }
   else panel.position.lerp(_v2.set(tx,ty,tz), Math.min(1, dt*7));
   panel.lookAt(headWorld(_v));
@@ -3505,7 +3538,7 @@ function ensureIcons(){
   if(iconPool.length) return;
   iconDim=iconTex(false); iconLit=iconTex(true);
   for(let i=0;i<5;i++){
-    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:iconDim, transparent:true, depthTest:false}));
+    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:iconDim, transparent:true}));
     s.scale.set(0.075,0.075,1); s.renderOrder=998; s.visible=false;
     scene.add(s); iconPool.push(s);
   }
@@ -3762,7 +3795,11 @@ function onSelectEnd(c){
   if(mode === 'ui'){
     const i = panelRayPick(c);
     const j = (i === null || i < 0) ? panelPick(c.position) : i;
-    if(j !== null && j >= 0 && panelCache[j] && panelCache[j].act) panelCache[j].act();
+    if(j !== null && j >= 0 && panelCache[j] && panelCache[j].act){
+      panelCache[j].act();
+      panelFlash = {i: j, until: nowMs()+190};
+      panelKey = '';
+    }
     return;
   }
   if(mode === 'finish'){
